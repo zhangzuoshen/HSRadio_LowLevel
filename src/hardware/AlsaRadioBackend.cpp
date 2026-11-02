@@ -41,6 +41,21 @@ struct ControlInfo {
 static_assert(sizeof(StRadioTune) == 28, "StRadioTune layout mismatch");
 static_assert(sizeof(RegTrait) == 2, "RegTrait layout mismatch");
 
+// Minimal, version-agnostic BYTES helpers. Some embedded/cross ALSA
+// toolchains do not declare snd_ctl_elem_value_set_bytes / get_bytes, so we
+// use the always-available per-byte primitives instead.
+static void setElemBytes(snd_ctl_elem_value_t *v, const void *data, size_t size) {
+    const unsigned char *p = static_cast<const unsigned char *>(data);
+    for (size_t i = 0; i < size; ++i)
+        snd_ctl_elem_value_set_byte(v, static_cast<unsigned int>(i), p[i]);
+}
+
+static void getElemBytes(snd_ctl_elem_value_t *v, void *data, size_t size) {
+    unsigned char *p = static_cast<unsigned char *>(data);
+    for (size_t i = 0; i < size; ++i)
+        p[i] = snd_ctl_elem_value_get_byte(v, static_cast<unsigned int>(i));
+}
+
 Result lookupElement(snd_ctl_t *ctl, const QString &name, unsigned int index,
                      ControlInfo &out)
 {
@@ -240,7 +255,7 @@ Result AlsaRadioBackend::applyTune()
                            QStringLiteral("snd_ctl_elem_value_malloc"), allocRc);
     ElemValuePtr elem(rawValue);
     snd_ctl_elem_value_set_id(elem.get(), info.id.get());
-    snd_ctl_elem_value_set_bytes(elem.get(), &tune, sizeof(tune));
+    setElemBytes(elem.get(), &tune, sizeof(tune));
 
     const int rc = snd_ctl_elem_write(m_ctl, elem.get());
     if (rc < 0)
@@ -276,7 +291,7 @@ Result AlsaRadioBackend::readTune(StRadioTune &out)
                            QStringLiteral("snd_ctl_elem_value_malloc"), allocRc);
     ElemValuePtr elem(rawValue);
     snd_ctl_elem_value_set_id(elem.get(), info.id.get());
-    snd_ctl_elem_value_set_bytes(elem.get(), &request, sizeof(request));
+    setElemBytes(elem.get(), &request, sizeof(request));
 
     // Write the read-back request, then read the filled struct back.
     int rc = snd_ctl_elem_write(m_ctl, elem.get());
@@ -289,11 +304,7 @@ Result AlsaRadioBackend::readTune(StRadioTune &out)
         return alsaFailure(ErrorCode::AlsaReadFailed,
                            QStringLiteral("snd_ctl_elem_read('%1')").arg(m_config.tuneControl), rc);
 
-    const void *bytes = snd_ctl_elem_value_get_bytes(elem.get());
-    if (!bytes)
-        return Result::failure(ErrorCode::AlsaReadFailed,
-                               QStringLiteral("No bytes returned by '%1'").arg(m_config.tuneControl));
-    std::memcpy(&out, bytes, sizeof(StRadioTune));
+    getElemBytes(elem.get(), &out, sizeof(StRadioTune));
     return Result::success();
 }
 
