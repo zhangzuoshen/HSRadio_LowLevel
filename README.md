@@ -1,24 +1,28 @@
 # HSRadio - Hardware Layer (Phase 1)
 
-Qt 5.12 / C++17 ALSA Mixer Control backend for the HSRadio service.
+Qt 5.12 / C++17 ALSA backend for the HSRadio service, targeting the
+SAF775D radio chip on the i.MX9 platform.
 
 ## Compatibility
 
 - Qt version: Qt 5.12.x (Core module).
-- Language standard: C++17; the target compiler must support C++17.
-- Build system: qmake (`HSRadioHardware.pro`).
+- Language standard: C++17.
+- Build systems: qmake (`HSRadioHardware.pro`) and CMake (`CMakeLists.txt`).
 - No Qt 6-only classes or APIs are used by this hardware layer.
-- ALSA development headers and library are required on the target sysroot.
+- ALSA development headers and library are required on the build host / target sysroot.
 
 ## Included
 
 - `HSRadioTypes`: common band, result, signal and hardware-state types.
 - `IRadioHardware`: chip-independent synchronous hardware contract.
-- `AlsaRadioBackend`: ALSA control implementation using `snd_ctl_elem_read()` and `snd_ctl_elem_write()`.
+- `AlsaRadioBackend`: ALSA control implementation for the SAF775D driver,
+  speaking the driver's binary ("BYTES blob") protocol directly.
 
-## Build with qmake
+## Build
 
-Use the qmake executable from the Qt 5.12 kit configured for the target platform. For example:
+### qmake
+
+Use the qmake executable from the Qt 5.12 kit configured for the target platform:
 
 ```sh
 mkdir build && cd build
@@ -26,67 +30,83 @@ mkdir build && cd build
 make -j$(nproc)
 ```
 
+### CMake
+
+```sh
+mkdir build && cd build
+cmake .. -DCMAKE_PREFIX_PATH=/path/to/Qt5.12
+cmake --build .
+```
+
 This project builds a static library named `libhsradio_hardware.a` on Linux.
 
-For an i.MX9 cross-build, invoke the qmake executable and compiler/toolchain configured for the i.MX9 Qt 5.12 kit. The target sysroot must provide ALSA headers (`alsa/asoundlib.h`) and `libasound`. If ALSA is installed in a non-standard sysroot location, configure its include and library search paths in the kit/toolchain rather than hard-coding host paths in this project file.
+For an i.MX9 cross-build, use the qmake/CMake configured for the i.MX9 Qt 5.12
+kit and a sysroot that provides ALSA headers (`alsa/asoundlib.h`) and
+`libasound`. Do not hard-code host paths in the project files.
 
 ## Thread ownership
 
-`AlsaRadioBackend` is a synchronous QObject. Construct it without a parent, move it to the dedicated hardware `QThread`, and execute **all** its methods in that thread. Do not call the methods directly from the service main thread. The backend checks its owning thread and returns an error for cross-thread calls.
+`AlsaRadioBackend` is a synchronous QObject. Construct it without a parent, move
+it to the dedicated hardware `QThread`, and execute **all** its methods in that
+thread. Do not call the methods directly from the service main thread. The
+backend checks its owning thread and returns an error for cross-thread calls.
 
-The object must also be shut down and destroyed in its owning thread. A queued invocation is the intended integration mechanism; the service-level worker/scheduler wrapper will be added in the next layer.
+The object must also be shut down and destroyed in its owning thread. A queued
+invocation is the intended integration mechanism; the service-level
+worker/scheduler wrapper will be added in the next layer.
 
-## ALSA control mapping
+## SAF775D ALSA control mapping
 
-The actual mixer control names and ranges for the target i.MX9 / SAF775D image have not been supplied. They are deliberately not hard-coded. Populate `AlsaRadioConfig` in platform integration code after inspecting the target device:
+The SAF775D driver exposes three mixer controls. They are board/driver specific
+and supplied via `AlsaRadioConfig` (names default to the reference board).
 
-```sh
-amixer -D default controls
-amixer -D default contents
-```
+- `tuneControl` (`Radiocontrol`, **BYTES**): carries the tune request struct
+  (`StRadioTune`) and returns signal information on read-back. **Band, frequency
+  and signal status are NOT separate controls** — they are fields of this single
+  BYTES blob.
+- `muteControl` (`Mute_radio`, **INTEGER/BOOLEAN**): 0 = unmute, 1 = mute.
+- `regControl` (`Radioregvalue`, **BYTES**, optional): register read/write
+  (Phase 1 out of scope; the control exists, no API yet).
 
-Required controls:
+### `StRadioTune` layout (must match the kernel driver byte-for-byte)
 
-- `band`: integer/boolean control; values configured by `fmBandValue` and `amBandValue`.
-- `frequencyKHz`: integer or integer64 control. The value passed to the backend is in kHz.
-- `mute`: integer/boolean control; values configured by `muteOnValue` and `muteOffValue`.
+| field       | type            | meaning                                              |
+|-------------|-----------------|------------------------------------------------------|
+| `mode`      | `unsigned char` | 0=standby, 0x10=preset, 0x20=search, 0x70=read-back  |
+| `band`      | `unsigned char` | 0 = FM, 1 = AM                                       |
+| `freq`      | `unsigned int`  | kHz (FM 8700–10800)                                  |
+| `usn`       | `unsigned int`  | signal quality                                       |
+| `wam`       | `unsigned char` | signal quality                                       |
+| `offset`    | `unsigned int`  | signal quality                                       |
+| `level`     | `unsigned int`  | received signal strength (RSSI)                      |
+| `modulation`| `unsigned char` | (AM) modulation                                      |
+| `stereo`    | `unsigned char` | stereo flag                                          |
 
-Optional read-only controls:
-
-- `rssi`, `usn`, `wam`, `offset`, `stereo`.
-
-Each control is addressed by ALSA Mixer interface + element name + index. Supported ALSA element types are INTEGER, INTEGER64 and BOOLEAN. ENUMERATED controls are intentionally not guessed or silently mapped. Optional signal controls that are not present or have unsupported types are marked unavailable; they do not prevent basic radio initialization.
-
-Example mapping (names below are placeholders, **not** SAF775D control names):
-
-```cpp
-HSRadio::AlsaRadioConfig config;
-config.device = QStringLiteral("default");
-config.band.name = QStringLiteral("<actual-band-control>");
-config.frequencyKHz.name = QStringLiteral("<actual-frequency-control>");
-config.mute.name = QStringLiteral("<actual-mute-control>");
-config.rssi.name = QStringLiteral("<actual-rssi-control>"); // optional
-config.fmBandValue = 0;
-config.amBandValue = 1;
-config.muteOffValue = 0;
-config.muteOnValue = 1;
-```
+The layout uses natural alignment (28 bytes) on both x86-64 and aarch64; this is
+guaranteed by a `static_assert` in `AlsaRadioBackend.cpp`. **If the target
+driver uses a different packing, the static_assert will fail to compile** — fix
+the struct to match the driver before building.
 
 ## Safety notes
 
-- ALSA element IDs, info and value objects use RAII-managed heap allocations. No ALSA stack-allocation pointer escapes its function scope.
-- Writes validate the element type and its supported value range before calling ALSA.
-- Frequency-region validation (FM/AM band limits and step) belongs to the manager/configuration layer, not this low-level ALSA adapter.
-- The backend does not implement seek loops, signal qualification, chip initialization sequences or audio-source routing.
+- ALSA handle/id/info/value objects use RAII-managed heap allocations; no
+  ALSA pointer escapes its function scope.
+- Writes validate the element type before calling ALSA; the mute control's
+  value range is checked for INTEGER controls.
+- The tune struct layout is verified at compile time (see above).
+- Frequency-region validation (FM/AM band limits and step) belongs to the
+  manager/configuration layer, not this low-level ALSA adapter.
+- The backend does not implement seek loops, signal qualification, chip
+  initialization sequences or audio-source routing.
 
 ## Not implemented in this phase
 
-- SAF775D-specific control mapping and chip initialization sequence.
+- SAF775D register access (`regControl`): the control exists but no API is
+  exposed by `IRadioHardware` yet.
 - Seek loop and signal qualification policy (belongs in manager/scheduler).
 - D-Bus and RadioClient.
 - Station persistence.
 - Device-loss recovery/reopen policy.
-
 
 ## Standalone hardware test executable
 
@@ -98,23 +118,21 @@ mkdir build-test && cd build-test
 make -j$(nproc)
 ```
 
-Run `./hsradio_hardware_test --help` for all options. The three required control names
+Run `./hsradio_hardware_test --help` for all options. The required controls
 must be taken from the target's actual `amixer -D default controls` output:
 
 ```sh
 ./hsradio_hardware_test \
   --device default \
-  --band-control "<actual-band-control>" \
-  --frequency-control "<actual-frequency-control>" \
-  --mute-control "<actual-mute-control>"
+  --tune-control "Radiocontrol" \
+  --mute-control "Mute_radio"
 ```
 
-Optional signal controls can be added with `--rssi-control`, `--usn-control`,
-`--wam-control`, `--offset-control`, and `--stereo-control`. Their names are
-board/driver-specific and must not be guessed.
+Optional: `--reg-control "Radioregvalue"`, `--mute-off-value 0`,
+`--mute-on-value 1`.
 
-By default, the program only initializes the backend and reads current state and
-signal information. It does not change band, frequency or mute. Write operations
+By default the program only initializes the backend and reads current state and
+signal information; it does not change band, frequency or mute. Write operations
 are opt-in:
 
 ```sh
@@ -122,7 +140,8 @@ are opt-in:
 ./hsradio_hardware_test ... --set-band FM --set-frequency 99500 --set-mute off
 ```
 
-Use write options only after confirming the control mapping and safe values on the
-target device. `--set-frequency` accepts kHz. The test application invokes the
-backend synchronously on its own main thread for simplicity; the production service
-must keep the backend on its dedicated hardware thread as described above.
+Use write options only after confirming the control mapping and safe values on
+the target device. `--set-frequency` accepts kHz. The test application invokes
+the backend synchronously on its own main thread for simplicity; the production
+service must keep the backend on its dedicated hardware thread as described
+above.
