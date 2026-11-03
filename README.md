@@ -146,6 +146,19 @@ are opt-in:
 ./hsradio_hardware_test ... --set-band FM --set-frequency 99500 --search
 ```
 
+The test tool also ships an automatic station-search business flow (`--seek`).
+It scans the band from `--seek-from` to `--seek-to` in `--seek-step` kHz
+increments, tunes each candidate in Search (stay-muted) mode, and accepts a
+candidate as a station when its signal meets the quality thresholds. The
+thresholds default to FM-tuned values and can be overridden with
+`--seek-min-rssi`, `--seek-max-usn`, `--seek-max-wam`, `--seek-max-offset`.
+
+```sh
+# Automatic station search (FM 87.5-108.0 MHz, 100 kHz step):
+./hsradio_hardware_test ... --seek --seek-band FM \
+  --seek-from 87500 --seek-to 108000 --seek-step 100
+```
+
 Use write options only after confirming the control mapping and safe values on
 the target device. `--set-frequency` accepts kHz. The test application invokes
 the backend synchronously on its own main thread for simplicity; the production

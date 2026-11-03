@@ -1,9 +1,12 @@
 #include "hsradio/hardware/AlsaRadioBackend.h"
+#include "hsradio/hardware/IRadioHardware.h"
 
 #include <QCommandLineOption>
 #include <QCommandLineParser>
 #include <QCoreApplication>
 #include <QDebug>
+#include <QList>
+#include <QThread>
 #include <QStringList>
 
 using namespace HSRadio;
@@ -50,6 +53,87 @@ bool parseIntegerOption(const QCommandLineParser &parser,
         return false;
     *value = parsed;
     return true;
+}
+
+// --- 自动搜台业务（上层逻辑）---
+// 扫描循环、频率步进、阈值判定都属于本层；硬件接口只作为原子能力：
+//   tune(freq, Search) 静音扫描 + readSignalInfo() 读回信号质量。
+
+struct SeekThreshold {
+    int minRssi   = 21;   // 最低信号强度 (level)
+    int maxUsn    = 25;   // 最大 USN 噪声
+    int maxWam    = 25;   // 最大 WAM 邻频干扰
+    int maxOffset = 40;   // 最大频偏
+};
+
+// 参考驱动时序：调谐后需约 30ms PLL 锁定，再多次抽样(2ms 间隔)。
+// N 次抽样中累计 3 次无效即放弃；至少 1 次有效则判为有效电台。
+bool sampleStationValid(IRadioHardware &hw,
+                        const SeekThreshold &th,
+                        int samples = 4,
+                        int sampleDelayMs = 2,
+                        int lockDelayMs = 30)
+{
+    QThread::msleep(static_cast<unsigned long>(lockDelayMs));
+    int validCount = 0;
+    int invalidCount = 0;
+    for (int i = 0; i < samples; ++i) {
+        SignalInfo info;
+        if (!hw.readSignalInfo(info).ok())
+            return false;
+
+        const bool ok = info.hasRssi   && info.rssi   >= th.minRssi
+                     && info.hasUsn    && info.usn    <= th.maxUsn
+                     && info.hasWam    && info.wam    <= th.maxWam
+                     && info.hasOffset && info.offset <= th.maxOffset;
+
+        if (ok) ++validCount; else ++invalidCount;
+        if (invalidCount >= 3) break;
+        QThread::msleep(static_cast<unsigned long>(sampleDelayMs));
+    }
+    return validCount >= 1;
+}
+
+// 自动搜台：在 [fromKHz, toKHz] 按 stepKHz 步进，以 Search 模式静音调谐，
+// 命中阈值则记录。返回是否找到至少一个电台。
+// 注：本工具只负责"找台"并记录，找到后不自动切回 Preset（避免测试时出声/爆音）。
+bool runStationSearch(IRadioHardware &hw,
+                      Band band,
+                      int fromKHz,
+                      int toKHz,
+                      int stepKHz,
+                      const SeekThreshold &th)
+{
+    if (stepKHz <= 0) {
+        qCritical() << "Seek step must be positive.";
+        return false;
+    }
+
+    const QString bandName = band == Band::FM ? QStringLiteral("FM")
+                                            : QStringLiteral("AM");
+    if (!reportResult(QStringLiteral("setBand(%1)").arg(bandName),
+                      hw.setBand(band))) {
+        return false;
+    }
+
+    QList<int> found;
+    for (int f = fromKHz; f <= toKHz; f += stepKHz) {
+        if (!hw.tune(f, TuneMode::Search).ok()) {
+            qWarning().noquote() << "tune skipped at" << f << "kHz";
+            continue;
+        }
+        if (sampleStationValid(hw, th)) {
+            found.append(f);
+            qInfo().noquote() << "[FOUND] station at" << f << "kHz";
+        }
+    }
+
+    qInfo().noquote()
+        << QStringLiteral("Seek complete: %1 station(s) found").arg(found.size());
+    for (int f : found)
+        qInfo().noquote() << "  -" << f << "kHz";
+
+    return !found.isEmpty();
 }
 
 } // namespace
@@ -120,6 +204,54 @@ int main(int argc, char *argv[])
         QStringLiteral("search"),
         QStringLiteral("Use Search (stay-muted) tune mode instead of Preset when tuning."));
 
+    const QCommandLineOption seekOption(
+        QStringLiteral("seek"),
+        QStringLiteral("Run automatic station search over [--seek-from, --seek-to] with --seek-step."));
+
+    const QCommandLineOption seekBandOption(
+        QStringLiteral("seek-band"),
+        QStringLiteral("Band for seek (FM|AM, default: FM)."),
+        QStringLiteral("FM|AM"),
+        QStringLiteral("FM"));
+
+    const QCommandLineOption seekFromOption(
+        QStringLiteral("seek-from"),
+        QStringLiteral("Seek start frequency in kHz (default: 87500)."),
+        QStringLiteral("kHz"),
+        QStringLiteral("87500"));
+
+    const QCommandLineOption seekToOption(
+        QStringLiteral("seek-to"),
+        QStringLiteral("Seek end frequency in kHz (default: 108000)."),
+        QStringLiteral("kHz"),
+        QStringLiteral("108000"));
+
+    const QCommandLineOption seekStepOption(
+        QStringLiteral("seek-step"),
+        QStringLiteral("Seek step in kHz (default: 100)."),
+        QStringLiteral("kHz"),
+        QStringLiteral("100"));
+
+    const QCommandLineOption seekMinRssiOption(
+        QStringLiteral("seek-min-rssi"),
+        QStringLiteral("Optional: minimum RSSI(level) to accept a station (default: 21)."),
+        QStringLiteral("value"));
+
+    const QCommandLineOption seekMaxUsnOption(
+        QStringLiteral("seek-max-usn"),
+        QStringLiteral("Optional: maximum USN to accept a station (default: 25)."),
+        QStringLiteral("value"));
+
+    const QCommandLineOption seekMaxWamOption(
+        QStringLiteral("seek-max-wam"),
+        QStringLiteral("Optional: maximum WAM to accept a station (default: 25)."),
+        QStringLiteral("value"));
+
+    const QCommandLineOption seekMaxOffsetOption(
+        QStringLiteral("seek-max-offset"),
+        QStringLiteral("Optional: maximum offset to accept a station (default: 40)."),
+        QStringLiteral("value"));
+
     parser.addOption(deviceOption);
     parser.addOption(tuneControlOption);
     parser.addOption(muteControlOption);
@@ -130,6 +262,15 @@ int main(int argc, char *argv[])
     parser.addOption(setFrequencyOption);
     parser.addOption(setMuteOption);
     parser.addOption(searchOption);
+    parser.addOption(seekOption);
+    parser.addOption(seekBandOption);
+    parser.addOption(seekFromOption);
+    parser.addOption(seekToOption);
+    parser.addOption(seekStepOption);
+    parser.addOption(seekMinRssiOption);
+    parser.addOption(seekMaxUsnOption);
+    parser.addOption(seekMaxWamOption);
+    parser.addOption(seekMaxOffsetOption);
     parser.process(app);
 
     if (!parser.isSet(tuneControlOption) || !parser.isSet(muteControlOption)) {
@@ -255,6 +396,52 @@ int main(int argc, char *argv[])
                                   : fields.join(QStringLiteral(", ")));
     } else {
         operationFailed = true;
+    }
+
+    if (parser.isSet(seekOption)) {
+        int seekFrom = 87500, seekTo = 108000, seekStep = 100;
+        if (!parseIntegerOption(parser, seekFromOption, &seekFrom)
+            || !parseIntegerOption(parser, seekToOption, &seekTo)
+            || !parseIntegerOption(parser, seekStepOption, &seekStep)) {
+            qCritical() << "Invalid --seek-from / --seek-to / --seek-step value.";
+            operationFailed = true;
+        } else {
+            const QString seekBandText = parser.value(seekBandOption).trimmed().toUpper();
+            Band seekBand = Band::FM;
+            if (seekBandText == QStringLiteral("AM"))
+                seekBand = Band::AM;
+            else if (seekBandText != QStringLiteral("FM")) {
+                qCritical() << "Invalid --seek-band; use FM or AM.";
+                operationFailed = true;
+            }
+
+            SeekThreshold th;
+            if (parser.isSet(seekMinRssiOption)
+                && !parseIntegerOption(parser, seekMinRssiOption, &th.minRssi))
+                operationFailed = true;
+            if (parser.isSet(seekMaxUsnOption)
+                && !parseIntegerOption(parser, seekMaxUsnOption, &th.maxUsn))
+                operationFailed = true;
+            if (parser.isSet(seekMaxWamOption)
+                && !parseIntegerOption(parser, seekMaxWamOption, &th.maxWam))
+                operationFailed = true;
+            if (parser.isSet(seekMaxOffsetOption)
+                && !parseIntegerOption(parser, seekMaxOffsetOption, &th.maxOffset))
+                operationFailed = true;
+
+            if (!operationFailed) {
+                const bool found = runStationSearch(hardware, seekBand,
+                                                   seekFrom, seekTo, seekStep, th);
+                operationFailed |= !reportResult(
+                    QStringLiteral("seek(%1, %2..%3 @%4)")
+                        .arg(seekBand == Band::FM ? QStringLiteral("FM")
+                                                   : QStringLiteral("AM"))
+                        .arg(seekFrom).arg(seekTo).arg(seekStep),
+                    found ? Result::success()
+                          : Result::failure(ErrorCode::HardwareOperationFailed,
+                                            QStringLiteral("no station found")));
+            }
+        }
     }
 
     hardware.shutdown();
