@@ -27,7 +27,7 @@ struct HSRadioSAF775XConfig {
 
     QString tuneControl = QStringLiteral("Radiocontrol");
     QString muteControl = QStringLiteral("Mute_radio");
-    QString regControl; // 可选，例如 "Radioregvalue"
+    QString regControl = QStringLiteral("Radioregvalue");
 
     long muteOffValue = 0;
     long muteOnValue = 1;
@@ -38,15 +38,15 @@ struct HSRadioSAF775XConfig {
 // #pragma pack）在 x86-64 与 aarch64 上均为 28 字节；.cpp 中的静态断言
 // 用于防止与目标驱动不一致。
 struct HSRadioSAF775XTune {
-    unsigned char mode = 0x10;  // 参见下方 SAF775X 模式常量
-    unsigned char band = 0;     // 0 = FM，1 = AM
-    unsigned int freq = 0;     // 10 kHz 单位（8700 = 87.00 MHz）；原样打包进 ALSA
-    unsigned int usn = 0;
-    unsigned char wam = 0;
-    unsigned int offset = 0;
-    unsigned int level = 0;     // 接收信号强度（RSSI）
-    unsigned char modulation = 0;
-    unsigned char stereo = 0;
+    unsigned char   mode        = 0x10;  // 参见下方 SAF775X 模式常量
+    unsigned char   band        = 0;     // 0 = FM，1 = AM
+    unsigned int    freq        = 0;     // 10 kHz 单位（8700 = 87.00 MHz）；原样打包进 ALSA
+    unsigned int    usn         = 0;
+    unsigned char   wam         = 0;
+    unsigned int    offset      = 0;
+    unsigned int    level       = 0;     // 接收信号强度（RSSI）
+    unsigned char   modulation  = 0;
+    unsigned char   stereo      = 0;
 };
 
 // SAF775X 寄存器特征（供可选 regControl 使用）。#pragma pack(2)
