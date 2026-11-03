@@ -19,6 +19,7 @@ INCLUDEPATH += $$PWD/include
 
 HEADERS += \
     $$PWD/include/hsradio/HSRadioTypes.h \
+    $$PWD/include/hsradio/HSRadioSeekPolicy.h \
     $$PWD/include/hsradio/hardware/IRadioHardware.h \
     $$PWD/include/hsradio/hardware/MockRadioHardware.h \
     $$PWD/include/hsradio/manager/HSRadioManager.h \
