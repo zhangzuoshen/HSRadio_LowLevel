@@ -1,4 +1,4 @@
-#include "hsradio/hardware/AlsaRadioBackend.h"
+#include "hsradio/hardware/HSRadioSAF775XBackend.h"
 
 #include <QThread>
 
@@ -12,13 +12,13 @@
 namespace HSRadio {
 namespace {
 
-// Mode field of StRadioTune.
+// Mode field of HSRadioSAF775XTune.
 constexpr unsigned char kModeStandby  = 0x00;
 constexpr unsigned char kModePreset   = 0x10; // tune to new program, short mute
 constexpr unsigned char kModeSearch   = 0x20; // tune to new program, stay muted
 constexpr unsigned char kModeReadBack = 0x70; // request signal parameters
 
-// Translate the hardware-agnostic TuneMode into the SAF775D ALSA
+// Translate the hardware-agnostic TuneMode into the SAF775X ALSA
 // control byte. This is the ONLY place that knows the device values.
 unsigned char alsaTuneMode(IRadioHardware::TuneMode mode) {
     switch (mode) {
@@ -48,8 +48,8 @@ struct ControlInfo {
 };
 
 // Compile-time guard: the tune struct must match the kernel driver layout.
-static_assert(sizeof(StRadioTune) == 28, "StRadioTune layout mismatch");
-static_assert(sizeof(RegTrait) == 2, "RegTrait layout mismatch");
+static_assert(sizeof(HSRadioSAF775XTune) == 28, "HSRadioSAF775XTune layout mismatch");
+static_assert(sizeof(HSRadioSAF775XRegTrait) == 2, "HSRadioSAF775XRegTrait layout mismatch");
 
 // Minimal, version-agnostic BYTES helpers. Some embedded/cross ALSA
 // toolchains do not declare snd_ctl_elem_value_set_bytes / get_bytes, so we
@@ -116,28 +116,28 @@ Result lookupElement(snd_ctl_t *ctl, const QString &name, unsigned int index,
 
 } // namespace
 
-AlsaRadioBackend::AlsaRadioBackend(AlsaRadioConfig config, QObject *parent)
+HSRadioSAF775XBackend::HSRadioSAF775XBackend(HSRadioSAF775XConfig config, QObject *parent)
     : QObject(parent), m_config(std::move(config))
 {
 }
 
-AlsaRadioBackend::~AlsaRadioBackend()
+HSRadioSAF775XBackend::~HSRadioSAF775XBackend()
 {
     // QObject instances must be destroyed in their owning thread.
     shutdown();
 }
 
-Result AlsaRadioBackend::checkThread() const
+Result HSRadioSAF775XBackend::checkThread() const
 {
     if (QThread::currentThread() != thread()) {
         return Result::failure(
             ErrorCode::HardwareOperationFailed,
-            QStringLiteral("AlsaRadioBackend called outside its owning thread"));
+            QStringLiteral("HSRadioSAF775XBackend called outside its owning thread"));
     }
     return Result::success();
 }
 
-Result AlsaRadioBackend::alsaFailure(ErrorCode code, const QString &operation,
+Result HSRadioSAF775XBackend::alsaFailure(ErrorCode code, const QString &operation,
                                      int alsaError)
 {
     return Result::failure(code,
@@ -145,7 +145,7 @@ Result AlsaRadioBackend::alsaFailure(ErrorCode code, const QString &operation,
                                .arg(operation, QString::fromLocal8Bit(snd_strerror(alsaError))));
 }
 
-Result AlsaRadioBackend::openControl()
+Result HSRadioSAF775XBackend::openControl()
 {
     if (m_config.device.trimmed().isEmpty())
         return Result::failure(ErrorCode::InvalidParameter,
@@ -161,7 +161,7 @@ Result AlsaRadioBackend::openControl()
     return Result::success();
 }
 
-Result AlsaRadioBackend::initialize()
+Result HSRadioSAF775XBackend::initialize()
 {
     const Result threadResult = checkThread();
     if (!threadResult.ok())
@@ -178,7 +178,7 @@ Result AlsaRadioBackend::initialize()
     if (!result.ok())
         return result;
 
-    // tuneControl must be a BYTES control large enough for StRadioTune.
+    // tuneControl must be a BYTES control large enough for HSRadioSAF775XTune.
     {
         ControlInfo info;
         result = lookupElement(m_ctl, m_config.tuneControl, 0, info);
@@ -191,12 +191,12 @@ Result AlsaRadioBackend::initialize()
             shutdown();
             return result;
         }
-        if (snd_ctl_elem_info_get_count(info.info.get()) < sizeof(StRadioTune)) {
+        if (snd_ctl_elem_info_get_count(info.info.get()) < sizeof(HSRadioSAF775XTune)) {
             result = Result::failure(ErrorCode::AlsaControlTypeUnsupported,
                 QStringLiteral("Tune control '%1' byte size %2 < required %3")
                     .arg(m_config.tuneControl)
                     .arg(snd_ctl_elem_info_get_count(info.info.get()))
-                    .arg(sizeof(StRadioTune)));
+                    .arg(sizeof(HSRadioSAF775XTune)));
             shutdown();
             return result;
         }
@@ -238,13 +238,13 @@ Result AlsaRadioBackend::initialize()
     return Result::success();
 }
 
-Result AlsaRadioBackend::applyTune()
+Result HSRadioSAF775XBackend::applyTune()
 {
     if (!m_initialized)
         return Result::failure(ErrorCode::HardwareNotReady,
                                QStringLiteral("Hardware not initialized"));
 
-    StRadioTune tune{};
+    HSRadioSAF775XTune tune{};
     tune.mode = alsaTuneMode(m_currentTuneMode);
     tune.band = (m_currentBand == Band::AM) ? 1 : 0;
     tune.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz -> 10 kHz units
@@ -274,13 +274,13 @@ Result AlsaRadioBackend::applyTune()
     return Result::success();
 }
 
-Result AlsaRadioBackend::readTune(StRadioTune &out)
+Result HSRadioSAF775XBackend::readTune(HSRadioSAF775XTune &out)
 {
     if (!m_initialized)
         return Result::failure(ErrorCode::HardwareNotReady,
                                QStringLiteral("Hardware not initialized"));
 
-    StRadioTune request{};
+    HSRadioSAF775XTune request{};
     request.mode = kModeReadBack;
     request.band = (m_currentBand == Band::AM) ? 1 : 0;
     request.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz -> 10 kHz units
@@ -314,11 +314,11 @@ Result AlsaRadioBackend::readTune(StRadioTune &out)
         return alsaFailure(ErrorCode::AlsaReadFailed,
                            QStringLiteral("snd_ctl_elem_read('%1')").arg(m_config.tuneControl), rc);
 
-    getElemBytes(elem.get(), &out, sizeof(StRadioTune));
+    getElemBytes(elem.get(), &out, sizeof(HSRadioSAF775XTune));
     return Result::success();
 }
 
-Result AlsaRadioBackend::writeMute(bool muted)
+Result HSRadioSAF775XBackend::writeMute(bool muted)
 {
     if (!m_initialized)
         return Result::failure(ErrorCode::HardwareNotReady,
@@ -359,7 +359,7 @@ Result AlsaRadioBackend::writeMute(bool muted)
     return Result::success();
 }
 
-Result AlsaRadioBackend::readMute(bool &muted) const
+Result HSRadioSAF775XBackend::readMute(bool &muted) const
 {
     if (!m_initialized)
         return Result::failure(ErrorCode::HardwareNotReady,
@@ -386,7 +386,7 @@ Result AlsaRadioBackend::readMute(bool &muted) const
     return Result::success();
 }
 
-Result AlsaRadioBackend::setBand(Band band)
+Result HSRadioSAF775XBackend::setBand(Band band)
 {
     const Result threadResult = checkThread();
     if (!threadResult.ok()) return threadResult;
@@ -396,7 +396,7 @@ Result AlsaRadioBackend::setBand(Band band)
     return applyTune();
 }
 
-Result AlsaRadioBackend::tune(int frequencyKHz, TuneMode mode)
+Result HSRadioSAF775XBackend::tune(int frequencyKHz, TuneMode mode)
 {
     const Result threadResult = checkThread();
     if (!threadResult.ok()) return threadResult;
@@ -407,7 +407,7 @@ Result AlsaRadioBackend::tune(int frequencyKHz, TuneMode mode)
     return applyTune();
 }
 
-Result AlsaRadioBackend::setMute(bool muted)
+Result HSRadioSAF775XBackend::setMute(bool muted)
 {
     const Result threadResult = checkThread();
     if (!threadResult.ok()) return threadResult;
@@ -416,7 +416,7 @@ Result AlsaRadioBackend::setMute(bool muted)
     return result;
 }
 
-Result AlsaRadioBackend::readState(HardwareState &state)
+Result HSRadioSAF775XBackend::readState(HardwareState &state)
 {
     const Result threadResult = checkThread();
     if (!threadResult.ok()) return threadResult;
@@ -425,7 +425,7 @@ Result AlsaRadioBackend::readState(HardwareState &state)
 
     // Prefer hardware values; fall back to the last commanded state if the
     // read-back is unavailable or returns implausible data.
-    StRadioTune tune{};
+    HSRadioSAF775XTune tune{};
     const bool tuned = readTune(tune).ok();
 
     if (tuned && tune.band == 0)
@@ -450,14 +450,14 @@ Result AlsaRadioBackend::readState(HardwareState &state)
     return Result::success();
 }
 
-Result AlsaRadioBackend::readSignalInfo(SignalInfo &info)
+Result HSRadioSAF775XBackend::readSignalInfo(SignalInfo &info)
 {
     const Result threadResult = checkThread();
     if (!threadResult.ok()) return threadResult;
     if (!m_initialized)
         return Result::failure(ErrorCode::HardwareNotReady, QStringLiteral("Hardware not initialized"));
 
-    StRadioTune tune{};
+    HSRadioSAF775XTune tune{};
     const Result readResult = readTune(tune);
     if (!readResult.ok()) return readResult;
 
@@ -475,7 +475,7 @@ Result AlsaRadioBackend::readSignalInfo(SignalInfo &info)
     return Result::success();
 }
 
-void AlsaRadioBackend::shutdown()
+void HSRadioSAF775XBackend::shutdown()
 {
     if (QThread::currentThread() != thread())
         return;

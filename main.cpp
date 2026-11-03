@@ -1,4 +1,4 @@
-#include "hsradio/hardware/AlsaRadioBackend.h"
+#include "hsradio/hardware/HSRadioSAF775XBackend.h"
 #include "hsradio/hardware/IRadioHardware.h"
 
 #include <QCommandLineOption>
@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
-        QStringLiteral("HSRadio ALSA hardware backend test tool (SAF775D BYTES protocol)"));
+        QStringLiteral("HSRadio ALSA hardware backend test tool (SAF775X BYTES protocol)"));
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -162,7 +162,7 @@ int main(int argc, char *argv[])
 
     const QCommandLineOption tuneControlOption(
         QStringLiteral("tune-control"),
-        QStringLiteral("ALSA BYTES control carrying the SAF775D tune struct (band + frequency + signal)."),
+        QStringLiteral("ALSA BYTES control carrying the SAF775X tune struct (band + frequency + signal)."),
         QStringLiteral("name"),
         QStringLiteral("Radiocontrol"));
 
@@ -283,7 +283,7 @@ int main(int argc, char *argv[])
         return 2;
     }
 
-    AlsaRadioConfig config;
+    HSRadioSAF775XConfig config;
     config.device = parser.value(deviceOption);
     config.tuneControl = parser.value(tuneControlOption);
     config.muteControl = parser.value(muteControlOption);
@@ -311,7 +311,7 @@ int main(int argc, char *argv[])
     // This standalone test runs the backend on the main thread.
     // Production code must move the backend to its dedicated hardware thread
     // and invoke all methods in that object's owning thread.
-    AlsaRadioBackend hardware(config);
+    HSRadioSAF775XBackend hardware(config);
 
     if (!reportResult(QStringLiteral("initialize"), hardware.initialize())) {
         hardware.shutdown();

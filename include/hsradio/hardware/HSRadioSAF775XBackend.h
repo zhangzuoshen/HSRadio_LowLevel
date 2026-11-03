@@ -10,7 +10,7 @@ typedef struct _snd_ctl snd_ctl_t;
 
 namespace HSRadio {
 
-// The SAF775D ALSA driver exposes three mixer controls. These names are
+// The SAF775X ALSA driver exposes three mixer controls. These names are
 // board/driver-specific and supplied by the platform integration layer.
 //   - tuneControl : SND_CTL_ELEM_TYPE_BYTES. Carries the tune request struct
 //                   (band + frequency + mode) and returns signal information
@@ -20,9 +20,9 @@ namespace HSRadio {
 //                   Register read/write (reg + data).
 //
 // This is intentionally NOT the idealized "one integer control per parameter"
-// model: the SAF775D packs band, frequency and signal status into a single
+// model: the SAF775X packs band, frequency and signal status into a single
 // BYTES blob, so the backend speaks the driver's binary protocol directly.
-struct AlsaRadioConfig {
+struct HSRadioSAF775XConfig {
     QString device = QStringLiteral("default");
 
     QString tuneControl = QStringLiteral("Radiocontrol");
@@ -33,12 +33,12 @@ struct AlsaRadioConfig {
     long muteOnValue = 1;
 };
 
-// Binary layout of the SAF775D tune request/response. The byte layout MUST
+// Binary layout of the SAF775X tune request/response. The byte layout MUST
 // match the kernel driver's expectation exactly. Natural alignment (no
 // #pragma pack) yields 28 bytes on both x86-64 and aarch64; the static_assert
 // in the .cpp guards against a mismatch with the target driver.
-struct StRadioTune {
-    unsigned char mode = 0x10;  // see SAF775D mode constants below
+struct HSRadioSAF775XTune {
+    unsigned char mode = 0x10;  // see SAF775X mode constants below
     unsigned char band = 0;     // 0 = FM, 1 = AM
     unsigned int freq = 0;     // 10 kHz units (8700 = 87.00 MHz); packed into ALSA as-is
     unsigned int usn = 0;
@@ -49,19 +49,19 @@ struct StRadioTune {
     unsigned char stereo = 0;
 };
 
-// SAF775D register trait (used by the optional regControl). #pragma pack(2)
+// SAF775X register trait (used by the optional regControl). #pragma pack(2)
 // matches the driver layout; 2 bytes.
 #pragma pack(push, 2)
-struct RegTrait {
+struct HSRadioSAF775XRegTrait {
     unsigned char reg = 0;
     unsigned char data = 0;
 };
 #pragma pack(pop)
 
-class AlsaRadioBackend final : public QObject, public IRadioHardware {
+class HSRadioSAF775XBackend final : public QObject, public IRadioHardware {
 public:
-    explicit AlsaRadioBackend(AlsaRadioConfig config, QObject *parent = nullptr);
-    ~AlsaRadioBackend() override;
+    explicit HSRadioSAF775XBackend(HSRadioSAF775XConfig config, QObject *parent = nullptr);
+    ~HSRadioSAF775XBackend() override;
 
     Result initialize() override;
     Result setBand(Band band) override;
@@ -74,14 +74,14 @@ public:
 private:
     Result openControl();
     Result applyTune();                  // write current band + frequency
-    Result readTune(StRadioTune &out);   // mode=0x70 write, then read back
+    Result readTune(HSRadioSAF775XTune &out);   // mode=0x70 write, then read back
     Result writeMute(bool muted);
     Result readMute(bool &muted) const;
     Result checkThread() const;
     static Result alsaFailure(ErrorCode code, const QString &operation,
                               int alsaError);
 
-    AlsaRadioConfig m_config;
+    HSRadioSAF775XConfig m_config;
     snd_ctl_t *m_ctl = nullptr;
     bool m_initialized = false;
 

@@ -11,8 +11,8 @@ find_package(ALSA REQUIRED)
 add_library(hsradio_hardware STATIC
     include/hsradio/HSRadioTypes.h
     include/hsradio/hardware/IRadioHardware.h
-    include/hsradio/hardware/AlsaRadioBackend.h
-    src/hardware/AlsaRadioBackend.cpp
+    include/hsradio/hardware/HSRadioSAF775XBackend.h
+    src/hardware/HSRadioSAF775XBackend.cpp
 )
 
 target_include_directories(hsradio_hardware

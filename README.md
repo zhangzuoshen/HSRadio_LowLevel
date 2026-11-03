@@ -1,7 +1,7 @@
 # HSRadio - Hardware Layer (Phase 1)
 
 Qt 5.12 / C++17 ALSA backend for the HSRadio service, targeting the
-SAF775D radio chip on the i.MX9 platform.
+SAF775X radio chip on the i.MX9 platform.
 
 ## Compatibility
 
@@ -15,7 +15,7 @@ SAF775D radio chip on the i.MX9 platform.
 
 - `HSRadioTypes`: common band, result, signal and hardware-state types.
 - `IRadioHardware`: chip-independent synchronous hardware contract.
-- `AlsaRadioBackend`: ALSA control implementation for the SAF775D driver,
+- `HSRadioSAF775XBackend`: ALSA control implementation for the SAF775X driver,
   speaking the driver's binary ("BYTES blob") protocol directly.
 
 ## Build
@@ -46,7 +46,7 @@ kit and a sysroot that provides ALSA headers (`alsa/asoundlib.h`) and
 
 ## Thread ownership
 
-`AlsaRadioBackend` is a synchronous QObject. Construct it without a parent, move
+`HSRadioSAF775XBackend` is a synchronous QObject. Construct it without a parent, move
 it to the dedicated hardware `QThread`, and execute **all** its methods in that
 thread. Do not call the methods directly from the service main thread. The
 backend checks its owning thread and returns an error for cross-thread calls.
@@ -55,20 +55,20 @@ The object must also be shut down and destroyed in its owning thread. A queued
 invocation is the intended integration mechanism; the service-level
 worker/scheduler wrapper will be added in the next layer.
 
-## SAF775D ALSA control mapping
+## SAF775X ALSA control mapping
 
-The SAF775D driver exposes three mixer controls. They are board/driver specific
-and supplied via `AlsaRadioConfig` (names default to the reference board).
+The SAF775X driver exposes three mixer controls. They are board/driver specific
+and supplied via `HSRadioSAF775XConfig` (names default to the reference board).
 
 - `tuneControl` (`Radiocontrol`, **BYTES**): carries the tune request struct
-  (`StRadioTune`) and returns signal information on read-back. **Band, frequency
+  (`HSRadioSAF775XTune`) and returns signal information on read-back. **Band, frequency
   and signal status are NOT separate controls** — they are fields of this single
   BYTES blob.
 - `muteControl` (`Mute_radio`, **INTEGER/BOOLEAN**): 0 = unmute, 1 = mute.
 - `regControl` (`Radioregvalue`, **BYTES**, optional): register read/write
   (Phase 1 out of scope; the control exists, no API yet).
 
-### `StRadioTune` layout (must match the kernel driver byte-for-byte)
+### `HSRadioSAF775XTune` layout (must match the kernel driver byte-for-byte)
 
 | field       | type            | meaning                                              |
 |-------------|-----------------|------------------------------------------------------|
@@ -83,7 +83,7 @@ and supplied via `AlsaRadioConfig` (names default to the reference board).
 | `stereo`    | `unsigned char` | stereo flag                                          |
 
 The layout uses natural alignment (28 bytes) on both x86-64 and aarch64; this is
-guaranteed by a `static_assert` in `AlsaRadioBackend.cpp`. **If the target
+guaranteed by a `static_assert` in `HSRadioSAF775XBackend.cpp`. **If the target
 driver uses a different packing, the static_assert will fail to compile** — fix
 the struct to match the driver before building.
 
@@ -101,7 +101,7 @@ the struct to match the driver before building.
 
 ## Not implemented in this phase
 
-- SAF775D register access (`regControl`): the control exists but no API is
+- SAF775X register access (`regControl`): the control exists but no API is
   exposed by `IRadioHardware` yet.
 - Seek loop and signal qualification policy (belongs in manager/scheduler).
 - D-Bus and RadioClient.
