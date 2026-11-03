@@ -10,12 +10,14 @@ INCLUDEPATH += $$PWD/include
 
 SOURCES += \
     $$PWD/hsradio_hardware_test/main.cpp \
-    $$PWD/src/hardware/HSRadioSAF775XBackend.cpp
+    $$PWD/src/hardware/HSRadioSAF775XBackend.cpp \
+    $$PWD/src/HSRadioLogging.cpp
 
 HEADERS += \
     $$PWD/include/hsradio/HSRadioTypes.h \
     $$PWD/include/hsradio/hardware/IRadioHardware.h \
-    $$PWD/include/hsradio/hardware/HSRadioSAF775XBackend.h
+    $$PWD/include/hsradio/hardware/HSRadioSAF775XBackend.h \
+    $$PWD/include/hsradio/HSRadioLogging.h
 
 unix:!macx {
     LIBS += -lasound
