@@ -14,8 +14,8 @@ set(CMAKE_AUTOMOC ON)
 # 此时只编译 Mock 与业务层。
 option(HSRADIO_ENABLE_ALSA "编译 SAF775X ALSA 真实后端（交叉编译/目标平台）" ON)
 
-# 是否构建调度器冒烟测试（宿主环境运行，需配合 -DHSRADIO_ENABLE_ALSA=OFF）。
-option(HSRADIO_BUILD_TESTS "构建调度器冒烟测试" OFF)
+# 是否构建调度器/管理器接口调试工具（宿主环境运行，需配合 -DHSRADIO_ENABLE_ALSA=OFF）。
+option(HSRADIO_BUILD_TESTS "构建接口调试工具 hsradio_manager_test" OFF)
 
 find_package(Qt5 5.12 REQUIRED COMPONENTS Core)
 

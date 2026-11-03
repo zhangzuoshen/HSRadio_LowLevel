@@ -57,25 +57,73 @@ cmake .. -DCMAKE_PREFIX_PATH=/path/to/Qt5.12 -DHSRADIO_ENABLE_ALSA=OFF
 For an i.MX9 cross-build keep the default (`HSRADIO_ENABLE_ALSA` ON); the
 target sysroot must provide `alsa/asoundlib.h` and `libasound`.
 
-### Scheduler smoke test (host only)
+### Scheduler debug tool (host only)
 
-`HSRadioManagerTest.pro` builds a console program that drives
-`HSRadioOperationScheduler` with `MockRadioHardware`, so it runs on
-any developer machine without ALSA headers or the radio chip. It covers the
-serial FIFO order of atomic commands, FullBand and NextStation seeks, seek
-cancellation, the forced mute/restore around a seek, and hardware fault
-propagation.
+`HSRadioManagerTest.pro` builds `hsradio_manager_test`, a
+parameter-driven debug tool for the scheduler / business layer. It uses
+`MockRadioHardware`, so it runs on any developer machine without ALSA headers
+or the radio chip. Every action is selected on the command line and prints
+`[PASS]` / `[FAIL]` plus the read-back values; there is no fixed
+test suite and no assertion count.
 
 ```sh
-mkdir build-test && cd build-test
+mkdir build-debug && cd build-debug
 /path/to/Qt5.12/bin/qmake ../HSRadioManagerTest.pro
-make -j$(nproc)
-./hsradio_manager_test
+make -j4
+./hsradio_manager_test --help
 ```
 
-The program prints a per-case trace, ends with `全部通过：N 项检查`
-(all checks passed) and exits with code 0; on failure it prints the failing
-line numbers and exits with code 1.
+Mock setup:
+
+| Option | Meaning |
+|---|---|
+| `--mock-demo` | preset three demo stations (87500 / 98000 / 104800 kHz) |
+| `--mock-station kHz[:rssi:usn:wam:offset]` | preset one valid station, repeatable |
+| `--mock-failure <ErrorCode>` | make every tune fail, e.g. `AlsaWriteFailed` |
+
+Scheduler commands (executed in this order when given):
+
+| Option | Maps to |
+|---|---|
+| `--set-band FM / AM` | `submitSetBand` |
+| `--set-frequency kHz` (+`--search`) | `submitTune` with Preset / Search mode |
+| `--set-mute on / off` | `submitSetMute` |
+| (default) | `submitReadState` + `submitReadSignal`, skip with `--no-read` |
+| `--seek` | `submitSeek`, plus `cancelSeek` when `--seek-cancel-after` is set |
+
+Seek parameters: `--seek-band`, `--seek-from`, `--seek-to`,
+`--seek-step`, `--seek-mode full|next`, `--seek-down`, `--seek-no-mute`,
+`--seek-no-wrap`, `--seek-min-rssi`, `--seek-max-usn`, `--seek-max-wam`,
+`--seek-max-offset`, `--seek-lock-ms`, `--seek-sample-ms`, `--seek-samples`,
+`--seek-max-invalid`, `--seek-cancel-after <ms>`, `--no-progress`.
+
+Examples:
+
+```sh
+# Preset listening: tune to 87.5 MHz and read the state back
+./hsradio_manager_test --mock-demo --set-band FM --set-frequency 87500
+
+# Full-band scan over the demo stations (fast timing, no PLL delay)
+./hsradio_manager_test --mock-demo --seek --seek-lock-ms 0 --seek-sample-ms 0
+
+# "Next station" from 87.5 MHz: expected to stop at 98000 kHz
+./hsradio_manager_test --mock-demo --seek --seek-mode next --seek-from 87500 \
+  --seek-to 108000 --seek-step 100 --no-progress
+
+# Cancellation: stop the scan 200 ms after it starts
+./hsradio_manager_test --mock-demo --seek --seek-cancel-after 200 --no-progress
+
+# Error path: every tune fails
+./hsradio_manager_test --mock-failure AlsaWriteFailed --set-frequency 87500
+```
+
+The trailing `[MOCK] lastTuneMode=...` and `muteCallCount=...` lines show
+whether the seek used Search mode and whether the forced mute / restore happened
+(2 calls for one seek that started unmuted).
+
+> `HSRadioManager` is still a stub: it needs `HSRadioStationStore` /
+> `HSRadioBandConfig`, which arrive with the storage layer. Until then this tool
+> exercises `HSRadioOperationScheduler` and `MockRadioHardware`.
 
 The same target is available through CMake:
 

@@ -6,9 +6,12 @@ TARGET = hsradio_manager_test
 CONFIG += console c++17
 CONFIG -= app_bundle
 
-# 调度器/管理器接口测试。
-# 只用 MockRadioHardware，不需要 ALSA，也不需要 i.MX9 真机：
-#   qmake HSRadioManagerTest.pro && make && ./hsradio_manager_test
+# 调度器 / 管理器接口调试工具（命令行参数驱动，对齐 HSRadioHardwareTest）。
+# 后端是 MockRadioHardware，不需要 ALSA、不需要 i.MX9 真机：
+#   qmake HSRadioManagerTest.pro && make
+#   ./hsradio_manager_test --help
+#   ./hsradio_manager_test --mock-demo --set-band FM --set-frequency 87500
+#   ./hsradio_manager_test --mock-demo --seek --seek-lock-ms 0 --seek-sample-ms 0
 
 INCLUDEPATH += $$PWD/include
 
