@@ -237,7 +237,7 @@ Result AlsaRadioBackend::applyTune()
     StRadioTune tune{};
     tune.mode = kModePreset;
     tune.band = (m_currentBand == Band::AM) ? 1 : 0;
-    tune.freq = static_cast<unsigned int>(m_currentFreqKHz);
+    tune.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz -> 10 kHz units
 
     ControlInfo info;
     Result result = lookupElement(m_ctl, m_config.tuneControl, 0, info);
@@ -273,7 +273,7 @@ Result AlsaRadioBackend::readTune(StRadioTune &out)
     StRadioTune request{};
     request.mode = kModeReadBack;
     request.band = (m_currentBand == Band::AM) ? 1 : 0;
-    request.freq = static_cast<unsigned int>(m_currentFreqKHz);
+    request.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz -> 10 kHz units
 
     ControlInfo info;
     Result result = lookupElement(m_ctl, m_config.tuneControl, 0, info);
@@ -426,7 +426,7 @@ Result AlsaRadioBackend::readState(HardwareState &state)
 
     if (tuned && tune.freq > 0 &&
         tune.freq <= static_cast<unsigned int>(std::numeric_limits<int>::max()))
-        state.frequencyKHz = static_cast<int>(tune.freq);
+        state.frequencyKHz = static_cast<int>(tune.freq) * 10;  // 10 kHz units -> kHz
     else
         state.frequencyKHz = m_currentFreqKHz;
 

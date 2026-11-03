@@ -40,7 +40,7 @@ struct AlsaRadioConfig {
 struct StRadioTune {
     unsigned char mode = 0x10;  // see SAF775D mode constants below
     unsigned char band = 0;     // 0 = FM, 1 = AM
-    unsigned int freq = 0;      // kHz
+    unsigned int freq = 0;     // 10 kHz units (8700 = 87.00 MHz); packed into ALSA as-is
     unsigned int usn = 0;
     unsigned char wam = 0;
     unsigned int offset = 0;
