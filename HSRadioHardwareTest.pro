@@ -9,7 +9,7 @@ CONFIG -= app_bundle
 INCLUDEPATH += $$PWD/include
 
 SOURCES += \
-    $$PWD/main.cpp \
+    $$PWD/hsradio_hardware_test/main.cpp \
     $$PWD/src/hardware/HSRadioSAF775XBackend.cpp
 
 HEADERS += \

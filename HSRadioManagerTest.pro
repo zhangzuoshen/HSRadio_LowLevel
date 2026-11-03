@@ -18,7 +18,7 @@ CONFIG -= app_bundle
 INCLUDEPATH += $$PWD/include
 
 SOURCES += \
-    $$PWD/test/main.cpp \
+    $$PWD/hsradio_manager_test/main.cpp \
     $$PWD/src/hardware/MockRadioHardware.cpp \
     $$PWD/src/scheduler/HSRadioOperationScheduler.cpp \
     $$PWD/src/manager/HSRadioManager.cpp \
