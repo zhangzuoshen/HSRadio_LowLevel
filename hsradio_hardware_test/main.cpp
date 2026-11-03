@@ -137,6 +137,8 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName(QStringLiteral("HSRadioHardwareTest"));
     QCoreApplication::setApplicationVersion(QStringLiteral("1.0"));
 
+    qSetMessagePattern("[%{time yyyy-MM-dd h:mm:ss.zzz}] [%{if-debug}D%{endif}%{if-info}I%{endif}%{if-warning}W%{endif}%{if-critical}C%{endif}%{if-fatal}F%{endif}] [%{pid}:%{threadid}] [%{category}] - %{message}");
+
     QCommandLineParser parser;
     parser.setApplicationDescription(
         QStringLiteral("HSRadio ALSA hardware backend test tool (SAF775X BYTES protocol)"));

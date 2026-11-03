@@ -220,6 +220,8 @@ bool runAtom(Probe *probe, quint64 id, const QString &label, bool *anyFailed)
 
 int main(int argc, char *argv[])
 {
+    qSetMessagePattern("[%{time yyyy-MM-dd h:mm:ss.zzz}] [%{if-debug}D%{endif}%{if-info}I%{endif}%{if-warning}W%{endif}%{if-critical}C%{endif}%{if-fatal}F%{endif}] [%{pid}:%{threadid}] [%{category}] - %{message}");
+
     QCoreApplication app(argc, argv);
     ::registerHSRadioMetaTypes();  // 跨线程信号元类型注册（库内亦自注册，此处显式保险）
     QCoreApplication::setApplicationName(QStringLiteral("HSRadioManagerTest"));
