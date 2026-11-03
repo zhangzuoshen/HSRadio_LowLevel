@@ -12,6 +12,8 @@ CONFIG -= app_bundle
 #   ./hsradio_manager_test --help
 #   ./hsradio_manager_test --mock-demo --set-band FM --set-frequency 87500
 #   ./hsradio_manager_test --mock-demo --seek --seek-lock-ms 0 --seek-sample-ms 0
+# 管理器模式：加 --manager 进入，用 --manager-* 调试 HSRadioManager 业务接口
+#   ./hsradio_manager_test --mock-demo --manager --manager-set-frequency 90000 --manager-seek
 
 INCLUDEPATH += $$PWD/include
 
@@ -19,7 +21,9 @@ SOURCES += \
     $$PWD/test/main.cpp \
     $$PWD/src/hardware/MockRadioHardware.cpp \
     $$PWD/src/scheduler/HSRadioOperationScheduler.cpp \
-    $$PWD/src/manager/HSRadioManager.cpp
+    $$PWD/src/manager/HSRadioManager.cpp \
+    $$PWD/src/storage/HSRadioStationStore.cpp \
+    $$PWD/src/storage/HSRadioRepository.cpp
 
 HEADERS += \
     $$PWD/include/hsradio/HSRadioTypes.h \
@@ -27,7 +31,9 @@ HEADERS += \
     $$PWD/include/hsradio/hardware/IRadioHardware.h \
     $$PWD/include/hsradio/hardware/MockRadioHardware.h \
     $$PWD/include/hsradio/scheduler/HSRadioOperationScheduler.h \
-    $$PWD/include/hsradio/manager/HSRadioManager.h
+    $$PWD/include/hsradio/manager/HSRadioManager.h \
+    $$PWD/include/hsradio/storage/HSRadioStationStore.h \
+    $$PWD/include/hsradio/storage/HSRadioRepository.h
 
 unix:!macx {
     QMAKE_CXXFLAGS += -Wall -Wextra -Wpedantic

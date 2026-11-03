@@ -26,9 +26,13 @@ set(HSRADIO_SOURCES
     include/hsradio/hardware/MockRadioHardware.h
     include/hsradio/manager/HSRadioManager.h
     include/hsradio/scheduler/HSRadioOperationScheduler.h
+    include/hsradio/storage/HSRadioStationStore.h
+    include/hsradio/storage/HSRadioRepository.h
     src/hardware/MockRadioHardware.cpp
     src/manager/HSRadioManager.cpp
     src/scheduler/HSRadioOperationScheduler.cpp
+    src/storage/HSRadioStationStore.cpp
+    src/storage/HSRadioRepository.cpp
 )
 
 if(HSRADIO_ENABLE_ALSA)

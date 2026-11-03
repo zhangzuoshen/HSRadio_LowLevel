@@ -30,6 +30,10 @@
 #include <functional>
 #include <memory>
 
+#include "hsradio/manager/HSRadioManager.h"
+#include "hsradio/storage/HSRadioStationStore.h"
+#include "hsradio/storage/HSRadioRepository.h"
+
 using namespace HSRadio;
 
 namespace {
@@ -183,7 +187,7 @@ bool waitUntil(const std::function<bool()> &predicate, int timeoutMs = 15000)
 struct Probe {
     QHash<quint64, ErrorCode> codes;
     QHash<quint64, HardwareState> states;
-    QHash<quint64, SignalInfo> signals;
+    QHash<quint64, SignalInfo> signalInfos;
     QString lastError;
 
     bool seekDone = false;
@@ -373,6 +377,110 @@ int main(int argc, char *argv[])
     parser.addOption(seekMaxInvalidOption);
     parser.addOption(seekCancelAfterOption);
     parser.addOption(noProgressOption);
+    const QCommandLineOption managerModeOption(
+        QStringLiteral("manager"),
+        QStringLiteral("启用管理器模式：以 HSRadioManager 为门面执行业务接口（--manager-* 才生效）。"));
+    const QCommandLineOption managerStateFileOption(
+        QStringLiteral("manager-state-file"),
+        QStringLiteral("状态文件路径（默认 radio_state.json，位于当前目录）。"),
+        QStringLiteral("path"),
+        QStringLiteral("radio_state.json"));
+    const QCommandLineOption managerConfigFileOption(
+        QStringLiteral("manager-config-file"),
+        QStringLiteral("配置文件路径（默认 radio_config.json，位于当前目录）。"),
+        QStringLiteral("path"),
+        QStringLiteral("radio_config.json"));
+    const QCommandLineOption managerSetBandOption(
+        QStringLiteral("manager-set-band"),
+        QStringLiteral("manager.setBand：FM 或 AM。"),
+        QStringLiteral("FM|AM"));
+    const QCommandLineOption managerSetFrequencyOption(
+        QStringLiteral("manager-set-frequency"),
+        QStringLiteral("manager.setFrequency：kHz。"),
+        QStringLiteral("kHz"));
+    const QCommandLineOption managerStepUpOption(
+        QStringLiteral("manager-step-up"),
+        QStringLiteral("manager.stepUp()。"));
+    const QCommandLineOption managerStepDownOption(
+        QStringLiteral("manager-step-down"),
+        QStringLiteral("manager.stepDown()。"));
+    const QCommandLineOption managerSetMuteOption(
+        QStringLiteral("manager-set-mute"),
+        QStringLiteral("manager.setMute：on 或 off。"),
+        QStringLiteral("on|off"));
+    const QCommandLineOption managerRefreshOption(
+        QStringLiteral("manager-refresh"),
+        QStringLiteral("manager.refreshSignal()。"));
+    const QCommandLineOption managerSeekOption(
+        QStringLiteral("manager-seek"),
+        QStringLiteral("manager.startSeek()：用配置里的频段范围与阈值扫描。"));
+    const QCommandLineOption managerSeekDownOption(
+        QStringLiteral("manager-seek-down"),
+        QStringLiteral("向下搜台（默认向上）。"));
+    const QCommandLineOption managerSeekModeOption(
+        QStringLiteral("manager-seek-mode"),
+        QStringLiteral("full=全频段重建，next=找下一个有效台（默认 full）。"),
+        QStringLiteral("full|next"),
+        QStringLiteral("full"));
+    const QCommandLineOption managerSeekCancelAfterOption(
+        QStringLiteral("manager-seek-cancel-after"),
+        QStringLiteral("N ms 后调用 stopSeek() 调试取消路径。"),
+        QStringLiteral("ms"));
+    const QCommandLineOption managerAddStationOption(
+        QStringLiteral("manager-add-station"),
+        QStringLiteral("添加电台 kHz[:name]（可重复）。"),
+        QStringLiteral("spec"));
+    const QCommandLineOption managerAddFavOption(
+        QStringLiteral("manager-add-fav"),
+        QStringLiteral("添加收藏 kHz[:name]（可重复）。"),
+        QStringLiteral("spec"));
+    const QCommandLineOption managerRemoveStationOption(
+        QStringLiteral("manager-remove-station"),
+        QStringLiteral("删除电台（按 id）。"),
+        QStringLiteral("id"));
+    const QCommandLineOption managerRemoveFavOption(
+        QStringLiteral("manager-remove-fav"),
+        QStringLiteral("删除收藏（按 id）。"),
+        QStringLiteral("id"));
+    const QCommandLineOption managerListStationsOption(
+        QStringLiteral("manager-list-stations"),
+        QStringLiteral("列出当前频段电台。"));
+    const QCommandLineOption managerListFavsOption(
+        QStringLiteral("manager-list-favs"),
+        QStringLiteral("列出当前频段收藏。"));
+    const QCommandLineOption managerRestoreOption(
+        QStringLiteral("manager-restore"),
+        QStringLiteral("manager.restoreLastState()。"));
+    const QCommandLineOption managerFactoryResetOption(
+        QStringLiteral("manager-factory-reset"),
+        QStringLiteral("manager.factoryReset()：状态与配置回默认。"));
+    const QCommandLineOption managerPrintStateOption(
+        QStringLiteral("manager-print-state"),
+        QStringLiteral("打印存储与配置状态摘要。"));
+
+    parser.addOption(managerModeOption);
+    parser.addOption(managerStateFileOption);
+    parser.addOption(managerConfigFileOption);
+    parser.addOption(managerSetBandOption);
+    parser.addOption(managerSetFrequencyOption);
+    parser.addOption(managerStepUpOption);
+    parser.addOption(managerStepDownOption);
+    parser.addOption(managerSetMuteOption);
+    parser.addOption(managerRefreshOption);
+    parser.addOption(managerSeekOption);
+    parser.addOption(managerSeekDownOption);
+    parser.addOption(managerSeekModeOption);
+    parser.addOption(managerSeekCancelAfterOption);
+    parser.addOption(managerAddStationOption);
+    parser.addOption(managerAddFavOption);
+    parser.addOption(managerRemoveStationOption);
+    parser.addOption(managerRemoveFavOption);
+    parser.addOption(managerListStationsOption);
+    parser.addOption(managerListFavsOption);
+    parser.addOption(managerRestoreOption);
+    parser.addOption(managerFactoryResetOption);
+    parser.addOption(managerPrintStateOption);
+
     parser.process(app);
 
     // —— 组装 Mock 硬件 ——
@@ -430,7 +538,7 @@ int main(int argc, char *argv[])
     QObject::connect(&scheduler, &HSRadioOperationScheduler::stateRead, &app,
                      [&](quint64 id, const HardwareState &state) { probe.states.insert(id, state); });
     QObject::connect(&scheduler, &HSRadioOperationScheduler::signalRead, &app,
-                     [&](quint64 id, const SignalInfo &info) { probe.signals.insert(id, info); });
+                     [&](quint64 id, const SignalInfo &info) { probe.signalInfos.insert(id, info); });
     QObject::connect(&scheduler, &HSRadioOperationScheduler::seekStarted, &app,
                      [&](quint64 id) {
                          qInfo().noquote() << QStringLiteral("[SEEK] started (requestId=%1)").arg(id);
@@ -538,7 +646,7 @@ int main(int argc, char *argv[])
         const quint64 signalId = scheduler.submitReadSignal();
         if (runAtom(&probe, signalId, QStringLiteral("submitReadSignal"), &anyFailed))
             qInfo().noquote()
-                << QStringLiteral("  signal: %1").arg(signalText(probe.signals.value(signalId)));
+                << QStringLiteral("  signal: %1").arg(signalText(probe.signalInfos.value(signalId)));
     }
 
     // —— 搜台 ——
@@ -651,6 +759,184 @@ int main(int argc, char *argv[])
                     anyFailed = true;
             }
         }
+    }
+
+    // —— 管理器模式：以 HSRadioManager 为门面执行业务接口 ——
+    if (parser.isSet(managerModeOption)
+        || parser.isSet(managerSetBandOption) || parser.isSet(managerSetFrequencyOption)
+        || parser.isSet(managerStepUpOption) || parser.isSet(managerStepDownOption)
+        || parser.isSet(managerSetMuteOption) || parser.isSet(managerRefreshOption)
+        || parser.isSet(managerSeekOption) || parser.isSet(managerAddStationOption)
+        || parser.isSet(managerAddFavOption) || parser.isSet(managerRemoveStationOption)
+        || parser.isSet(managerRemoveFavOption) || parser.isSet(managerListStationsOption)
+        || parser.isSet(managerListFavsOption) || parser.isSet(managerRestoreOption)
+        || parser.isSet(managerFactoryResetOption) || parser.isSet(managerPrintStateOption)) {
+        const QString stateFile = parser.isSet(managerStateFileOption)
+            ? parser.value(managerStateFileOption) : QStringLiteral("radio_state.json");
+        const QString configFile = parser.isSet(managerConfigFileOption)
+            ? parser.value(managerConfigFileOption) : QStringLiteral("radio_config.json");
+        HSRadioStationStore store(stateFile);
+        HSRadioRepository repository(configFile);
+        HSRadioManager manager(&scheduler, &store, &repository);
+
+        QObject::connect(&manager, &HSRadioManager::initialized, &app, [&](ErrorCode code){
+            qInfo().noquote() << QStringLiteral("[MGR] initialized: %1").arg(errorCodeName(code));
+        });
+        QObject::connect(&manager, &HSRadioManager::bandChanged, &app, [&](Band b){
+            qInfo().noquote() << QStringLiteral("[MGR] bandChanged: %1").arg(bandName(b));
+        });
+        QObject::connect(&manager, &HSRadioManager::frequencyChanged, &app, [&](int f){
+            qInfo().noquote() << QStringLiteral("[MGR] frequencyChanged: %1 kHz").arg(f);
+        });
+        QObject::connect(&manager, &HSRadioManager::signalInfoChanged, &app, [&](const SignalInfo &info){
+            qInfo().noquote() << QStringLiteral("[MGR] signalInfoChanged: %1").arg(signalText(info));
+        });
+        QObject::connect(&manager, &HSRadioManager::stateChanged, &app, [&](const HardwareState &s){
+            qInfo().noquote() << QStringLiteral("[MGR] stateChanged: band=%1 freq=%2 mute=%3")
+                .arg(bandName(s.band)).arg(s.frequencyKHz)
+                .arg(s.muted ? QStringLiteral("on") : QStringLiteral("off"));
+        });
+        bool mgrSeekDone = false; bool mgrSeekFound = false; int mgrSeekFinal = 0;
+        QObject::connect(&manager, &HSRadioManager::seekStarted, &app, [&](quint64 id, bool up){
+            qInfo().noquote() << QStringLiteral("[MGR][SEEK] started id=%1 dir=%2")
+                .arg(id).arg(up ? QStringLiteral("up") : QStringLiteral("down"));
+        });
+        QObject::connect(&manager, &HSRadioManager::seekProgress, &app, [&](quint64, int f){
+            if (!parser.isSet(noProgressOption))
+                qInfo().noquote() << QStringLiteral("[MGR][SEEK] scanning %1 kHz").arg(f);
+        });
+        QObject::connect(&manager, &HSRadioManager::seekFinished, &app, [&](quint64 id, int f, bool found){
+            mgrSeekDone = true; mgrSeekFound = found; mgrSeekFinal = f;
+            qInfo().noquote() << QStringLiteral("[MGR][SEEK] finished id=%1 stop=%2 found=%3")
+                .arg(id).arg(f).arg(found ? QStringLiteral("true") : QStringLiteral("false"));
+        });
+        QObject::connect(&manager, &HSRadioManager::stationsChanged, &app, [&](Band b){
+            qInfo().noquote() << QStringLiteral("[MGR] stationsChanged: %1 (%2)")
+                .arg(bandName(b)).arg(manager.stations(b).size());
+        });
+        QObject::connect(&manager, &HSRadioManager::favoritesChanged, &app, [&](){
+            qInfo().noquote() << QStringLiteral("[MGR] favoritesChanged");
+        });
+        QObject::connect(&manager, &HSRadioManager::errorOccurred, &app, [&](ErrorCode code, const QString &msg){
+            qWarning().noquote() << QStringLiteral("[MGR][ERROR] %1: %2").arg(errorCodeName(code), msg);
+        });
+
+        const Result initRes = manager.initialize();
+        if (!reportResult(QStringLiteral("manager.initialize()"), initRes.code, initRes.message)) {
+            anyFailed = true;
+        } else {
+            auto parseFreqName = [](const QString &text, int *freq, QString *name) -> bool {
+                const QStringList parts = text.split(QLatin1Char(':'));
+                bool ok = false;
+                *freq = parts.value(0).toInt(&ok);
+                if (!ok) return false;
+                *name = parts.size() > 1 ? parts.value(1) : QString();
+                return true;
+            };
+            if (parser.isSet(managerRestoreOption))
+                reportResult(QStringLiteral("manager.restoreLastState()"), manager.restoreLastState().code, QString());
+            if (parser.isSet(managerFactoryResetOption))
+                reportResult(QStringLiteral("manager.factoryReset()"), manager.factoryReset().code, QString());
+            if (parser.isSet(managerSetBandOption)) {
+                const QString t = parser.value(managerSetBandOption).trimmed().toUpper();
+                if (t == QStringLiteral("FM") || t == QStringLiteral("AM"))
+                    manager.setBand(t == QStringLiteral("FM") ? Band::FM : Band::AM);
+                else { qCritical() << "Invalid --manager-set-band"; anyFailed = true; }
+            }
+            if (parser.isSet(managerSetFrequencyOption)) {
+                int f = 0;
+                if (parseIntegerOption(parser, managerSetFrequencyOption, &f))
+                    manager.setFrequency(f);
+                else { qCritical() << "Invalid --manager-set-frequency"; anyFailed = true; }
+            }
+            if (parser.isSet(managerStepUpOption)) manager.stepUp();
+            if (parser.isSet(managerStepDownOption)) manager.stepDown();
+            if (parser.isSet(managerSetMuteOption)) {
+                const QString t = parser.value(managerSetMuteOption).trimmed().toLower();
+                if (t == QStringLiteral("on") || t == QStringLiteral("off"))
+                    manager.setMute(t == QStringLiteral("on"));
+                else { qCritical() << "Invalid --manager-set-mute"; anyFailed = true; }
+            }
+            if (parser.isSet(managerRefreshOption)) manager.refreshSignal();
+            for (const QString &t : parser.values(managerAddStationOption)) {
+                int f = 0; QString n;
+                if (parseFreqName(t, &f, &n)) {
+                    Station s; s.band = manager.currentBand(); s.frequencyKHz = f;
+                    s.name = n; s.source = QStringLiteral("manual");
+                    const Result r = manager.addStation(s);
+                    reportResult(QStringLiteral("manager.addStation(%1)").arg(f), r.code, r.message);
+                } else { qCritical() << "Invalid --manager-add-station:" << t; anyFailed = true; }
+            }
+            for (const QString &t : parser.values(managerAddFavOption)) {
+                int f = 0; QString n;
+                if (parseFreqName(t, &f, &n)) {
+                    Station s; s.band = manager.currentBand(); s.frequencyKHz = f;
+                    s.name = n; s.source = QStringLiteral("manual");
+                    const Result r = manager.addFavorite(s);
+                    reportResult(QStringLiteral("manager.addFavorite(%1)").arg(f), r.code, r.message);
+                } else { qCritical() << "Invalid --manager-add-fav:" << t; anyFailed = true; }
+            }
+            if (parser.isSet(managerRemoveStationOption)) {
+                const QString id = parser.value(managerRemoveStationOption);
+                const Result r = manager.removeStation(id);
+                reportResult(QStringLiteral("manager.removeStation(%1)").arg(id), r.code, r.message);
+            }
+            if (parser.isSet(managerRemoveFavOption)) {
+                const QString id = parser.value(managerRemoveFavOption);
+                const Result r = manager.removeFavorite(id);
+                reportResult(QStringLiteral("manager.removeFavorite(%1)").arg(id), r.code, r.message);
+            }
+            if (parser.isSet(managerListStationsOption)) {
+                qInfo().noquote() << QStringLiteral("[MGR] stations(%1):")
+                    .arg(bandName(manager.currentBand()));
+                for (const Station &s : manager.stations(manager.currentBand()))
+                    qInfo().noquote() << QStringLiteral("   - %1 %2 kHz name=%3 source=%4")
+                        .arg(s.id).arg(s.frequencyKHz).arg(s.name).arg(s.source);
+            }
+            if (parser.isSet(managerListFavsOption)) {
+                qInfo().noquote() << QStringLiteral("[MGR] favorites(%1):")
+                    .arg(bandName(manager.currentBand()));
+                for (const Station &s : manager.favorites(manager.currentBand()))
+                    qInfo().noquote() << QStringLiteral("   - %1 %2 kHz name=%3 source=%4")
+                        .arg(s.id).arg(s.frequencyKHz).arg(s.name).arg(s.source);
+            }
+            if (parser.isSet(managerPrintStateOption)) {
+                qInfo().noquote() << QStringLiteral("[MGR] region=%1 band=%2 freq=%3")
+                    .arg(repository.region())
+                    .arg(bandName(manager.currentBand()))
+                    .arg(manager.currentFrequencyKHz());
+                qInfo().noquote() << QStringLiteral("[MGR] stations FM/AM=%1/%2 favorites FM/AM=%3/%4")
+                    .arg(manager.stations(Band::FM).size())
+                    .arg(manager.stations(Band::AM).size())
+                    .arg(manager.favorites(Band::FM).size())
+                    .arg(manager.favorites(Band::AM).size());
+            }
+            if (parser.isSet(managerSeekOption)) {
+                const bool up = !parser.isSet(managerSeekDownOption);
+                const SeekMode mode = (parser.value(managerSeekModeOption).trimmed().toLower()
+                    == QStringLiteral("next")) ? SeekMode::NextStation : SeekMode::FullBand;
+                manager.startSeek(up, mode);
+                int cancelAfter = 0;
+                if (parser.isSet(managerSeekCancelAfterOption))
+                    parseIntegerOption(parser, managerSeekCancelAfterOption, &cancelAfter);
+                if (cancelAfter > 0)
+                    QTimer::singleShot(cancelAfter, &app, [&](){
+                        qInfo().noquote() << QStringLiteral("[MGR][SEEK] cancelSeek() requested");
+                        scheduler.cancelSeek();
+                    });
+                if (waitUntil([&](){ return mgrSeekDone; }, 120000)) {
+                    qInfo().noquote() << QStringLiteral("[MGR][SEEK] summary: found=%1 stop=%2")
+                        .arg(mgrSeekFound ? QStringLiteral("true") : QStringLiteral("false"))
+                        .arg(mgrSeekFinal);
+                } else {
+                    qCritical().noquote() << "[FAIL] manager.startSeek | timed out";
+                    anyFailed = true;
+                }
+            }
+        }
+        manager.shutdown();
+        qInfo().noquote() << QStringLiteral("[MGR] state saved -> %1, config saved -> %2")
+            .arg(stateFile).arg(configFile);
     }
 
     // —— Mock 观测点：验证调谐模式与"搜台强制静音/恢复"——

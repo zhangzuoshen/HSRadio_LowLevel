@@ -3,13 +3,14 @@
 #include "hsradio/HSRadioTypes.h"
 
 #include <QObject>
-#include <QVector>
+
+class QTimer;
 
 namespace HSRadio {
 
 class HSRadioOperationScheduler;
 class HSRadioStationStore;
-class HSRadioBandConfig;
+class HSRadioRepository;
 
 // 业务门面：运行在主线程，对外提供收音机全部业务能力。
 // 约定：
@@ -21,13 +22,13 @@ class HSRadioManager : public QObject {
 public:
     HSRadioManager(HSRadioOperationScheduler *scheduler,
                    HSRadioStationStore *store,
-                   HSRadioBandConfig *config,
+                   HSRadioRepository *repository,
                    QObject *parent = nullptr);
     ~HSRadioManager() override;
 
     // —— 生命周期 ——
-    Result initialize();     // 同步：加载配置/状态；硬件初始化入队，就绪发 initialized
-    void   shutdown();       // 停止任务、保存状态、释放资源
+    Result initialize();     // 同步：加载配置/状态 + 信号接线；硬件初始化由上层 scheduler.initialize 完成
+    void   shutdown();       // 停定时器、保存状态、释放资源
     Result restoreLastState();
     Result factoryReset();   // 状态回默认 + 配置回出厂模板
 
@@ -76,9 +77,22 @@ signals:
     void errorOccurred(ErrorCode code, const QString &message);
 
 private:
+    void connectScheduler();
+    void enqueueReadState();
+
     HSRadioOperationScheduler *m_scheduler = nullptr;
     HSRadioStationStore      *m_store = nullptr;
-    HSRadioBandConfig        *m_config = nullptr;
+    HSRadioRepository        *m_repository = nullptr;
+
+    bool      m_initialized = false;
+    bool      m_searching = false;
+    Band      m_currentBand = Band::FM;
+    int       m_currentFrequencyKHz = 0;
+    bool      m_muted = false;
+    SignalInfo m_lastSignalInfo;
+    bool      m_currentSeekUpward = true;
+    quint64   m_lastSeekId = 0;
+    QTimer   *m_refreshTimer = nullptr;
 };
 
 } // namespace HSRadio
