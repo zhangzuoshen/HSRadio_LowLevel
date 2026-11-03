@@ -18,6 +18,16 @@ constexpr unsigned char kModePreset   = 0x10; // tune to new program, short mute
 constexpr unsigned char kModeSearch   = 0x20; // tune to new program, stay muted
 constexpr unsigned char kModeReadBack = 0x70; // request signal parameters
 
+// Translate the hardware-agnostic TuneMode into the SAF775D ALSA
+// control byte. This is the ONLY place that knows the device values.
+unsigned char alsaTuneMode(TuneMode mode) {
+    switch (mode) {
+    case TuneMode::Search: return kModeSearch;
+    case TuneMode::Preset:
+    default:              return kModePreset;
+    }
+}
+
 struct ElemIdDeleter {
     void operator()(snd_ctl_elem_id_t *p) const noexcept { snd_ctl_elem_id_free(p); }
 };
@@ -235,7 +245,7 @@ Result AlsaRadioBackend::applyTune()
                                QStringLiteral("Hardware not initialized"));
 
     StRadioTune tune{};
-    tune.mode = static_cast<unsigned char>(m_currentTuneMode);
+    tune.mode = alsaTuneMode(m_currentTuneMode);
     tune.band = (m_currentBand == Band::AM) ? 1 : 0;
     tune.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz -> 10 kHz units
 
