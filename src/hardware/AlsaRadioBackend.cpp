@@ -20,10 +20,10 @@ constexpr unsigned char kModeReadBack = 0x70; // request signal parameters
 
 // Translate the hardware-agnostic TuneMode into the SAF775D ALSA
 // control byte. This is the ONLY place that knows the device values.
-unsigned char alsaTuneMode(TuneMode mode) {
+unsigned char alsaTuneMode(IRadioHardware::TuneMode mode) {
     switch (mode) {
-    case TuneMode::Search: return kModeSearch;
-    case TuneMode::Preset:
+    case IRadioHardware::TuneMode::Search: return kModeSearch;
+    case IRadioHardware::TuneMode::Preset:
     default:              return kModePreset;
     }
 }

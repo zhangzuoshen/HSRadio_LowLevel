@@ -8,6 +8,7 @@
 #include <QList>
 #include <QThread>
 #include <QStringList>
+#include <QTime>
 
 using namespace HSRadio;
 
@@ -66,13 +67,13 @@ struct SeekThreshold {
     int maxOffset = 40;   // 最大频偏
 };
 
-// 参考驱动时序：调谐后需约 30ms PLL 锁定，再多次抽样(2ms 间隔)。
+// 参考驱动时序：调谐后需约 8ms PLL 锁定，再多次抽样(2ms 间隔)。
 // N 次抽样中累计 3 次无效即放弃；至少 1 次有效则判为有效电台。
 bool sampleStationValid(IRadioHardware &hw,
                         const SeekThreshold &th,
                         int samples = 4,
                         int sampleDelayMs = 2,
-                        int lockDelayMs = 30)
+                        int lockDelayMs = 8)
 {
     QThread::msleep(static_cast<unsigned long>(lockDelayMs));
     int validCount = 0;
@@ -116,9 +117,12 @@ bool runStationSearch(IRadioHardware &hw,
         return false;
     }
 
+    QTime time;
+    time.start();// 启动计时器
+
     QList<int> found;
     for (int f = fromKHz; f <= toKHz; f += stepKHz) {
-        if (!hw.tune(f, TuneMode::Search).ok()) {
+        if (!hw.tune(f, IRadioHardware::TuneMode::Search).ok()) {
             qWarning().noquote() << "tune skipped at" << f << "kHz";
             continue;
         }
@@ -129,7 +133,7 @@ bool runStationSearch(IRadioHardware &hw,
     }
 
     qInfo().noquote()
-        << QStringLiteral("Seek complete: %1 station(s) found").arg(found.size());
+        << QStringLiteral("Seek complete: %1 station(s) found(%2 s)").arg(found.size()).arg(time.elapsed()/1000.0);
     for (int f : found)
         qInfo().noquote() << "  -" << f << "kHz";
 
@@ -337,7 +341,7 @@ int main(int argc, char *argv[])
             operationFailed = true;
         } else {
             const bool search = parser.isSet(searchOption);
-            const TuneMode mode = search ? TuneMode::Search : TuneMode::Preset;
+            const IRadioHardware::TuneMode mode = search ? IRadioHardware::TuneMode::Search : IRadioHardware::TuneMode::Preset;
             operationFailed |= !reportResult(
                 QStringLiteral("tune(%1 kHz, %2)")
                     .arg(frequencyKHz)
