@@ -129,7 +129,8 @@ must be taken from the target's actual `amixer -D default controls` output:
 ```
 
 Optional: `--reg-control "Radioregvalue"`, `--mute-off-value 0`,
-`--mute-on-value 1`.
+`--mute-on-value 1`. Add `--search` together with `--set-frequency` to tune
+in Search (stay-muted) mode, used while scanning for stations.
 
 By default the program only initializes the backend and reads current state and
 signal information; it does not change band, frequency or mute. Write operations
@@ -138,6 +139,11 @@ are opt-in:
 ```sh
 # These examples perform real hardware writes:
 ./hsradio_hardware_test ... --set-band FM --set-frequency 99500 --set-mute off
+```
+
+```sh
+# Scan in muted Search mode (station seek) instead of normal Preset listening:
+./hsradio_hardware_test ... --set-band FM --set-frequency 99500 --search
 ```
 
 Use write options only after confirming the control mapping and safe values on

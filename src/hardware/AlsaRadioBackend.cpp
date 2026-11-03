@@ -235,7 +235,7 @@ Result AlsaRadioBackend::applyTune()
                                QStringLiteral("Hardware not initialized"));
 
     StRadioTune tune{};
-    tune.mode = kModePreset;
+    tune.mode = static_cast<unsigned char>(m_currentTuneMode);
     tune.band = (m_currentBand == Band::AM) ? 1 : 0;
     tune.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz -> 10 kHz units
 
@@ -386,13 +386,14 @@ Result AlsaRadioBackend::setBand(Band band)
     return applyTune();
 }
 
-Result AlsaRadioBackend::tune(int frequencyKHz)
+Result AlsaRadioBackend::tune(int frequencyKHz, TuneMode mode)
 {
     const Result threadResult = checkThread();
     if (!threadResult.ok()) return threadResult;
     if (frequencyKHz <= 0)
         return Result::failure(ErrorCode::InvalidParameter, QStringLiteral("Frequency must be positive kHz"));
     m_currentFreqKHz = frequencyKHz;
+    m_currentTuneMode = mode;
     return applyTune();
 }
 

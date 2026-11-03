@@ -65,7 +65,7 @@ public:
 
     Result initialize() override;
     Result setBand(Band band) override;
-    Result tune(int frequencyKHz) override;
+    Result tune(int frequencyKHz, TuneMode mode = TuneMode::Preset) override;
     Result setMute(bool muted) override;
     Result readState(HardwareState &state) override;
     Result readSignalInfo(SignalInfo &info) override;
@@ -88,6 +88,7 @@ private:
     Band m_currentBand = Band::FM;
     int m_currentFreqKHz = 87000;
     bool m_currentMuted = false;
+    TuneMode m_currentTuneMode = TuneMode::Preset;
 };
 
 } // namespace HSRadio

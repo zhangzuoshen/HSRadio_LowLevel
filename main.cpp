@@ -116,6 +116,10 @@ int main(int argc, char *argv[])
         QStringLiteral("Optional write test: set mute to on or off."),
         QStringLiteral("on|off"));
 
+    const QCommandLineOption searchOption(
+        QStringLiteral("search"),
+        QStringLiteral("Use Search (stay-muted) tune mode instead of Preset when tuning."));
+
     parser.addOption(deviceOption);
     parser.addOption(tuneControlOption);
     parser.addOption(muteControlOption);
@@ -125,6 +129,7 @@ int main(int argc, char *argv[])
     parser.addOption(setBandOption);
     parser.addOption(setFrequencyOption);
     parser.addOption(setMuteOption);
+    parser.addOption(searchOption);
     parser.process(app);
 
     if (!parser.isSet(tuneControlOption) || !parser.isSet(muteControlOption)) {
@@ -190,9 +195,13 @@ int main(int argc, char *argv[])
             qCritical() << "Invalid --set-frequency value.";
             operationFailed = true;
         } else {
+            const bool search = parser.isSet(searchOption);
+            const TuneMode mode = search ? TuneMode::Search : TuneMode::Preset;
             operationFailed |= !reportResult(
-                QStringLiteral("tune(%1 kHz)").arg(frequencyKHz),
-                hardware.tune(frequencyKHz));
+                QStringLiteral("tune(%1 kHz, %2)")
+                    .arg(frequencyKHz)
+                    .arg(search ? QStringLiteral("search") : QStringLiteral("preset")),
+                hardware.tune(frequencyKHz, mode));
         }
     }
 
