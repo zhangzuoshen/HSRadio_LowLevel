@@ -7,7 +7,7 @@ CONFIG += staticlib
 CONFIG += c++17
 CONFIG -= app_bundle
 
-# HSRadio 硬件抽象层
+# HSRadio 硬件抽象层 + 业务接口
 # 兼容 Qt 5.12 与 C++17。
 
 INCLUDEPATH += $$PWD/include
@@ -15,10 +15,14 @@ INCLUDEPATH += $$PWD/include
 HEADERS += \
     $$PWD/include/hsradio/HSRadioTypes.h \
     $$PWD/include/hsradio/hardware/IRadioHardware.h \
-    $$PWD/include/hsradio/hardware/HSRadioSAF775XBackend.h
+    $$PWD/include/hsradio/hardware/HSRadioSAF775XBackend.h \
+    $$PWD/include/hsradio/manager/HSRadioManager.h \
+    $$PWD/include/hsradio/scheduler/HSRadioOperationScheduler.h
 
 SOURCES += \
-    $$PWD/src/hardware/HSRadioSAF775XBackend.cpp
+    $$PWD/src/hardware/HSRadioSAF775XBackend.cpp \
+    $$PWD/src/manager/HSRadioManager.cpp \
+    $$PWD/src/scheduler/HSRadioOperationScheduler.cpp
 
 # ALSA Mixer 控制接口
 unix:!macx {
