@@ -8,6 +8,7 @@
 #include <QTimer>
 #include <QtGlobal>
 #include <QDebug>
+#include "hsradio/HSRadioLogging.h"
 
 namespace HSRadio {
 
@@ -56,6 +57,8 @@ Result HSRadioManager::initialize()
     m_refreshTimer->start();
 
     m_initialized = true;
+    qCInfo(hsradioManager).noquote() << "initialized; band=" << (m_currentBand == Band::AM ? "AM" : "FM")
+                                      << "freq=" << m_currentFrequencyKHz << "kHz";
     return Result::success();
 }
 
@@ -142,6 +145,7 @@ void HSRadioManager::shutdown()
 
 Result HSRadioManager::restoreLastState()
 {
+    qCInfo(hsradioManager).noquote() << "restoreLastState";
     if (!m_store || !m_scheduler)
         return Result::failure(ErrorCode::HardwareNotReady,
                                QStringLiteral("未初始化或调度器缺失"));
@@ -159,6 +163,7 @@ Result HSRadioManager::restoreLastState()
 
 Result HSRadioManager::factoryReset()
 {
+    qCInfo(hsradioManager).noquote() << "factoryReset";
     if (!m_store || !m_repository)
         return Result::failure(ErrorCode::InvalidParameter,
                                QStringLiteral("存储层未注入"));
@@ -186,6 +191,7 @@ RequestId HSRadioManager::setBand(Band band)
 {
     if (!m_scheduler || !m_store)
         return 0;
+    qCInfo(hsradioManager).noquote() << "setBand" << (band == Band::AM ? "AM" : "FM");
     m_store->setCurrentBand(band);
     m_store->save();
     m_currentBand = band;
@@ -201,12 +207,13 @@ RequestId HSRadioManager::setFrequency(int frequencyKHz)
 {
     if (!m_scheduler || !m_store || !m_repository)
         return 0;
+    qCInfo(hsradioManager).noquote() << "setFrequency" << frequencyKHz << "kHz";
     const auto bc = m_repository->bandConfig(m_currentBand);
     int target = frequencyKHz;
     if (target < bc.minKHz || target > bc.maxKHz) {
         target = qBound(bc.minKHz, target, bc.maxKHz);
-        qWarning().noquote()
-            << QStringLiteral("[HSRadioManager] frequency %1 clamped to [%2,%3]")
+        qCWarning(hsradioManager).noquote()
+            << QStringLiteral("frequency %1 clamped to [%2,%3]")
                    .arg(frequencyKHz).arg(bc.minKHz).arg(bc.maxKHz);
     }
     m_store->setLastFrequency(m_currentBand, target);
@@ -244,6 +251,8 @@ RequestId HSRadioManager::startSeek(bool upward, SeekMode mode)
 {
     if (!m_scheduler || !m_store || !m_repository)
         return 0;
+    qCInfo(hsradioManager).noquote() << "startSeek mode=" << (mode == SeekMode::FullBand ? "full" : "next")
+                                     << "upward=" << upward;
     const Band band = m_currentBand;
     const int startKHz = m_currentFrequencyKHz;
     if (mode == SeekMode::FullBand)
@@ -257,6 +266,7 @@ RequestId HSRadioManager::startSeek(bool upward, SeekMode mode)
 
 RequestId HSRadioManager::stopSeek()
 {
+    qCInfo(hsradioManager).noquote() << "stopSeek";
     if (m_scheduler)
         m_scheduler->cancelSeek();
     return m_lastSeekId;   // 取消结果经 seekFinished 返回，无独立 RequestId 语义
@@ -266,6 +276,7 @@ RequestId HSRadioManager::setMute(bool muted)
 {
     if (!m_scheduler)
         return 0;
+    qCInfo(hsradioManager).noquote() << "setMute" << muted;
     m_muted = muted;
     const RequestId id = m_scheduler->submitSetMute(muted);
     enqueueReadState();

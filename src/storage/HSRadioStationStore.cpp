@@ -1,4 +1,5 @@
 #include "hsradio/storage/HSRadioStationStore.h"
+#include "hsradio/HSRadioLogging.h"
 
 #include <QFile>
 #include <QIODevice>
@@ -99,8 +100,10 @@ Result HSRadioStationStore::load()
     QJsonDocument doc;
     bool exists = false;
     const Result r = readJsonFile(m_stateFilePath, &doc, &exists);
-    if (!r.ok())
+    if (!r.ok()) {
+        qCWarning(hsradioStorageStore).noquote() << "state load failed:" << r.message;
         return r;
+    }
     if (!exists)
         return Result::success();   // 用内置默认
 
@@ -128,6 +131,7 @@ Result HSRadioStationStore::load()
     for (const QJsonValue &v : fa.value(QStringLiteral("AM")).toArray())
         m_favoritesAM.append(parseStation(v.toObject(), Band::AM));
 
+    qCInfo(hsradioStorageStore).noquote() << "state loaded; band=" << bandKey(m_currentBand) << "FM stations=" << m_stationsFM.size() << "AM stations=" << m_stationsAM.size();
     return Result::success();
 }
 
@@ -158,7 +162,10 @@ Result HSRadioStationStore::save()
     fa.insert(QStringLiteral("AM"), famArr);
     root.insert(QStringLiteral("favorites"), fa);
 
-    return writeJsonFile(m_stateFilePath, QJsonDocument(root));
+    const Result r = writeJsonFile(m_stateFilePath, QJsonDocument(root));
+    if (!r.ok())
+        qCCritical(hsradioStorageStore).noquote() << "state save failed:" << r.message;
+    return r;
 }
 
 Result HSRadioStationStore::resetToDefault()
@@ -170,6 +177,7 @@ Result HSRadioStationStore::resetToDefault()
     m_stationsAM.clear();
     m_favoritesFM.clear();
     m_favoritesAM.clear();
+    qCInfo(hsradioStorageStore).noquote() << "reset to default";
     return Result::success();
 }
 
@@ -231,6 +239,7 @@ Result HSRadioStationStore::addStation(const Station &station)
         (*l)[idx] = s;   // upsert（覆盖同 id）
     else
         l->append(s);
+    qCDebug(hsradioStorageStore).noquote() << "addStation" << s.id;
     return Result::success();
 }
 
@@ -242,6 +251,7 @@ Result HSRadioStationStore::removeStation(const QString &id)
             const int idx = indexOfId(*l, id);
             if (idx >= 0) {
                 l->removeAt(idx);
+                qCDebug(hsradioStorageStore).noquote() << "removeStation" << id;
                 return Result::success();
             }
         }
@@ -301,6 +311,7 @@ Result HSRadioStationStore::removeFavorite(const QString &id)
         const int idx = indexOfId(*l, id);
         if (idx >= 0) {
             l->removeAt(idx);
+            qCDebug(hsradioStorageStore).noquote() << "removeFavorite" << id;
             return Result::success();
         }
     }

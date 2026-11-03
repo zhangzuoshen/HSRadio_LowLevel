@@ -1,4 +1,5 @@
 #include "hsradio/storage/HSRadioRepository.h"
+#include "hsradio/HSRadioLogging.h"
 
 #include <QFile>
 #include <QIODevice>
@@ -82,8 +83,10 @@ Result HSRadioRepository::load()
     QJsonDocument doc;
     bool exists = false;
     const Result r = readJsonFile(m_configFilePath, &doc, &exists);
-    if (!r.ok())
+    if (!r.ok()) {
+        qCWarning(hsradioStorageRepository).noquote() << "config load failed:" << r.message;
         return r;
+    }
     if (!exists) {
         if (QFile::exists(m_defaultConfigFilePath)) {
             QJsonDocument d;
@@ -98,6 +101,7 @@ Result HSRadioRepository::load()
     }
     if (doc.isObject())
         parseFromJson(doc.object());
+    qCInfo(hsradioStorageRepository).noquote() << "config loaded; region=" << m_region;
     return Result::success();
 }
 
@@ -126,7 +130,10 @@ Result HSRadioRepository::save()
     seek.insert(QStringLiteral("wrapAround"), m_seekWrapAround);
     root.insert(QStringLiteral("seek"), seek);
 
-    return writeJsonFile(m_configFilePath, QJsonDocument(root));
+    const Result r = writeJsonFile(m_configFilePath, QJsonDocument(root));
+    if (!r.ok())
+        qCCritical(hsradioStorageRepository).noquote() << "config save failed:" << r.message;
+    return r;
 }
 
 Result HSRadioRepository::resetToDefault()
@@ -141,6 +148,7 @@ Result HSRadioRepository::resetToDefault()
         }
     }
     setBuiltInDefaults();
+    qCInfo(hsradioStorageRepository).noquote() << "reset to default";
     return Result::success();
 }
 

@@ -33,6 +33,8 @@ set(HSRADIO_SOURCES
     src/scheduler/HSRadioOperationScheduler.cpp
     src/storage/HSRadioStationStore.cpp
     src/storage/HSRadioRepository.cpp
+    include/hsradio/HSRadioLogging.h
+    src/HSRadioLogging.cpp
 )
 
 if(HSRADIO_ENABLE_ALSA)
@@ -65,7 +67,7 @@ target_compile_options(hsradio_hardware PRIVATE
 )
 
 if(HSRADIO_BUILD_TESTS)
-    add_executable(hsradio_manager_test test/main.cpp)
+    add_executable(hsradio_manager_test hsradio_manager_test/main.cpp)
 
     target_link_libraries(hsradio_manager_test
         PRIVATE hsradio_hardware

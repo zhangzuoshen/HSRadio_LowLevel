@@ -25,14 +25,16 @@ HEADERS += \
     $$PWD/include/hsradio/manager/HSRadioManager.h \
     $$PWD/include/hsradio/scheduler/HSRadioOperationScheduler.h \
     $$PWD/include/hsradio/storage/HSRadioStationStore.h \
-    $$PWD/include/hsradio/storage/HSRadioRepository.h
+    $$PWD/include/hsradio/storage/HSRadioRepository.h \
+    $$PWD/include/hsradio/HSRadioLogging.h
 
 SOURCES += \
     $$PWD/src/hardware/MockRadioHardware.cpp \
     $$PWD/src/manager/HSRadioManager.cpp \
     $$PWD/src/scheduler/HSRadioOperationScheduler.cpp \
     $$PWD/src/storage/HSRadioStationStore.cpp \
-    $$PWD/src/storage/HSRadioRepository.cpp
+    $$PWD/src/storage/HSRadioRepository.cpp \
+    $$PWD/src/HSRadioLogging.cpp
 
 # 真实 ALSA 后端（默认编译；CONFIG+=hsradio_no_alsa 时排除）
 !contains(CONFIG, hsradio_no_alsa) {

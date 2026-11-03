@@ -23,7 +23,8 @@ SOURCES += \
     $$PWD/src/scheduler/HSRadioOperationScheduler.cpp \
     $$PWD/src/manager/HSRadioManager.cpp \
     $$PWD/src/storage/HSRadioStationStore.cpp \
-    $$PWD/src/storage/HSRadioRepository.cpp
+    $$PWD/src/storage/HSRadioRepository.cpp \
+    $$PWD/src/HSRadioLogging.cpp
 
 HEADERS += \
     $$PWD/include/hsradio/HSRadioTypes.h \
@@ -33,7 +34,8 @@ HEADERS += \
     $$PWD/include/hsradio/scheduler/HSRadioOperationScheduler.h \
     $$PWD/include/hsradio/manager/HSRadioManager.h \
     $$PWD/include/hsradio/storage/HSRadioStationStore.h \
-    $$PWD/include/hsradio/storage/HSRadioRepository.h
+    $$PWD/include/hsradio/storage/HSRadioRepository.h \
+    $$PWD/include/hsradio/HSRadioLogging.h
 
 unix:!macx {
     QMAKE_CXXFLAGS += -Wall -Wextra -Wpedantic
