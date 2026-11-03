@@ -140,7 +140,7 @@ bool runStationSearch(IRadioHardware &hw,
     return !found.isEmpty();
 }
 
-} // namespace
+} // 命名空间
 
 int main(int argc, char *argv[])
 {
@@ -308,9 +308,9 @@ int main(int argc, char *argv[])
                       << (config.regControl.isEmpty() ? QStringLiteral("(none)")
                                                       : config.regControl);
 
-    // This standalone test runs the backend on the main thread.
-    // Production code must move the backend to its dedicated hardware thread
-    // and invoke all methods in that object's owning thread.
+    // 该独立测试在主线程上运行后端。
+    // 生产代码必须将后端移到其专用的硬件线程
+    // 并在该对象的所属线程中调用所有方法。
     HSRadioSAF775XBackend hardware(config);
 
     if (!reportResult(QStringLiteral("initialize"), hardware.initialize())) {

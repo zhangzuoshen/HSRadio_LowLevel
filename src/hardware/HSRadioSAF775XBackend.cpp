@@ -12,14 +12,14 @@
 namespace HSRadio {
 namespace {
 
-// Mode field of HSRadioSAF775XTune.
+// HSRadioSAF775XTune 的 mode 字段。
 constexpr unsigned char kModeStandby  = 0x00;
-constexpr unsigned char kModePreset   = 0x10; // tune to new program, short mute
-constexpr unsigned char kModeSearch   = 0x20; // tune to new program, stay muted
-constexpr unsigned char kModeReadBack = 0x70; // request signal parameters
+constexpr unsigned char kModePreset   = 0x10; // 调谐到新节目，短静音
+constexpr unsigned char kModeSearch   = 0x20; // 调谐到新节目，保持静音
+constexpr unsigned char kModeReadBack = 0x70; // 请求信号参数
 
-// Translate the hardware-agnostic TuneMode into the SAF775X ALSA
-// control byte. This is the ONLY place that knows the device values.
+// 将硬件无关的 TuneMode 翻译为 SAF775X 的 ALSA
+// 控制字节。这里是唯一知晓设备值的地方。
 unsigned char alsaTuneMode(IRadioHardware::TuneMode mode) {
     switch (mode) {
     case IRadioHardware::TuneMode::Search: return kModeSearch;
@@ -47,13 +47,13 @@ struct ControlInfo {
     ElemInfoPtr info;
 };
 
-// Compile-time guard: the tune struct must match the kernel driver layout.
+// 编译期保护：调谐结构体必须与内核驱动布局一致。
 static_assert(sizeof(HSRadioSAF775XTune) == 28, "HSRadioSAF775XTune layout mismatch");
 static_assert(sizeof(HSRadioSAF775XRegTrait) == 2, "HSRadioSAF775XRegTrait layout mismatch");
 
-// Minimal, version-agnostic BYTES helpers. Some embedded/cross ALSA
-// toolchains do not declare snd_ctl_elem_value_set_bytes / get_bytes, so we
-// use the always-available per-byte primitives instead.
+// 最小化、与版本无关的 BYTES 辅助函数。部分嵌入式/交叉 ALSA
+// 工具链未声明 snd_ctl_elem_value_set_bytes / get_bytes，因此
+// 改用始终可用的逐字节原语。
 static void setElemBytes(snd_ctl_elem_value_t *v, const void *data, size_t size) {
     const unsigned char *p = static_cast<const unsigned char *>(data);
     for (size_t i = 0; i < size; ++i)
@@ -114,7 +114,7 @@ Result lookupElement(snd_ctl_t *ctl, const QString &name, unsigned int index,
     return Result::success();
 }
 
-} // namespace
+} // 命名空间
 
 HSRadioSAF775XBackend::HSRadioSAF775XBackend(HSRadioSAF775XConfig config, QObject *parent)
     : QObject(parent), m_config(std::move(config))
@@ -123,7 +123,7 @@ HSRadioSAF775XBackend::HSRadioSAF775XBackend(HSRadioSAF775XConfig config, QObjec
 
 HSRadioSAF775XBackend::~HSRadioSAF775XBackend()
 {
-    // QObject instances must be destroyed in their owning thread.
+    // QObject 实例必须在其所属线程中销毁。
     shutdown();
 }
 
@@ -178,7 +178,7 @@ Result HSRadioSAF775XBackend::initialize()
     if (!result.ok())
         return result;
 
-    // tuneControl must be a BYTES control large enough for HSRadioSAF775XTune.
+    // tuneControl 必须是足够容纳 HSRadioSAF775XTune 的 BYTES 控件。
     {
         ControlInfo info;
         result = lookupElement(m_ctl, m_config.tuneControl, 0, info);
@@ -202,7 +202,7 @@ Result HSRadioSAF775XBackend::initialize()
         }
     }
 
-    // muteControl must be INTEGER/INTEGER64/BOOLEAN.
+    // muteControl 必须是 INTEGER/INTEGER64/BOOLEAN。
     {
         ControlInfo info;
         result = lookupElement(m_ctl, m_config.muteControl, 0, info);
@@ -219,7 +219,7 @@ Result HSRadioSAF775XBackend::initialize()
         }
     }
 
-    // regControl is optional; if supplied it must be a BYTES control.
+    // regControl 为可选；若提供，必须是 BYTES 控件。
     if (!m_config.regControl.trimmed().isEmpty()) {
         ControlInfo info;
         result = lookupElement(m_ctl, m_config.regControl, 0, info);
@@ -247,7 +247,7 @@ Result HSRadioSAF775XBackend::applyTune()
     HSRadioSAF775XTune tune{};
     tune.mode = alsaTuneMode(m_currentTuneMode);
     tune.band = (m_currentBand == Band::AM) ? 1 : 0;
-    tune.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz -> 10 kHz units
+    tune.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz → 10 kHz 单位
 
     ControlInfo info;
     Result result = lookupElement(m_ctl, m_config.tuneControl, 0, info);
@@ -283,7 +283,7 @@ Result HSRadioSAF775XBackend::readTune(HSRadioSAF775XTune &out)
     HSRadioSAF775XTune request{};
     request.mode = kModeReadBack;
     request.band = (m_currentBand == Band::AM) ? 1 : 0;
-    request.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz -> 10 kHz units
+    request.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz → 10 kHz 单位
 
     ControlInfo info;
     Result result = lookupElement(m_ctl, m_config.tuneControl, 0, info);
@@ -303,7 +303,7 @@ Result HSRadioSAF775XBackend::readTune(HSRadioSAF775XTune &out)
     snd_ctl_elem_value_set_id(elem.get(), info.id.get());
     setElemBytes(elem.get(), &request, sizeof(request));
 
-    // Write the read-back request, then read the filled struct back.
+    // 写入读回请求，然后再读回填充后的结构体。
     int rc = snd_ctl_elem_write(m_ctl, elem.get());
     if (rc < 0)
         return alsaFailure(ErrorCode::AlsaWriteFailed,
@@ -423,8 +423,8 @@ Result HSRadioSAF775XBackend::readState(HardwareState &state)
     if (!m_initialized)
         return Result::failure(ErrorCode::HardwareNotReady, QStringLiteral("Hardware not initialized"));
 
-    // Prefer hardware values; fall back to the last commanded state if the
-    // read-back is unavailable or returns implausible data.
+    // 优先采用硬件值；若
+    // 读回不可用或返回不合理数据，则回退到上次下发的状态。
     HSRadioSAF775XTune tune{};
     const bool tuned = readTune(tune).ok();
 
@@ -437,7 +437,7 @@ Result HSRadioSAF775XBackend::readState(HardwareState &state)
 
     if (tuned && tune.freq > 0 &&
         tune.freq <= static_cast<unsigned int>(std::numeric_limits<int>::max()))
-        state.frequencyKHz = static_cast<int>(tune.freq) * 10;  // 10 kHz units -> kHz
+        state.frequencyKHz = static_cast<int>(tune.freq) * 10;  // 10 kHz 单位 → kHz
     else
         state.frequencyKHz = m_currentFreqKHz;
 
@@ -462,7 +462,7 @@ Result HSRadioSAF775XBackend::readSignalInfo(SignalInfo &info)
     if (!readResult.ok()) return readResult;
 
     info = SignalInfo{};
-    info.rssi = static_cast<int>(tune.level);   // level == received signal strength
+    info.rssi = static_cast<int>(tune.level);   // level 即接收信号强度
     info.usn = static_cast<int>(tune.usn);
     info.wam = static_cast<int>(tune.wam);
     info.offset = static_cast<int>(tune.offset);
@@ -486,4 +486,4 @@ void HSRadioSAF775XBackend::shutdown()
     }
 }
 
-} // namespace HSRadio
+} // HSRadio 命名空间

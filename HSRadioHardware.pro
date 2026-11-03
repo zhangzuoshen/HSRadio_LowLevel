@@ -7,8 +7,8 @@ CONFIG += staticlib
 CONFIG += c++17
 CONFIG -= app_bundle
 
-# HSRadio hardware abstraction layer
-# Compatible with Qt 5.12 and C++17.
+# HSRadio 硬件抽象层
+# 兼容 Qt 5.12 与 C++17。
 
 INCLUDEPATH += $$PWD/include
 
@@ -20,10 +20,10 @@ HEADERS += \
 SOURCES += \
     $$PWD/src/hardware/HSRadioSAF775XBackend.cpp
 
-# ALSA Mixer Control API
+# ALSA Mixer 控制接口
 unix:!macx {
     LIBS += -lasound
     QMAKE_CXXFLAGS += -Wall -Wextra -Wpedantic
 }
 
-# The target toolchain/sysroot must provide ALSA headers and libasound.
+# 目标工具链/系统根必须提供 ALSA 头文件与 libasound。
