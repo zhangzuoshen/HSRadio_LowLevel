@@ -57,6 +57,34 @@ cmake .. -DCMAKE_PREFIX_PATH=/path/to/Qt5.12 -DHSRADIO_ENABLE_ALSA=OFF
 For an i.MX9 cross-build keep the default (`HSRADIO_ENABLE_ALSA` ON); the
 target sysroot must provide `alsa/asoundlib.h` and `libasound`.
 
+### Scheduler smoke test (host only)
+
+`HSRadioManagerTest.pro` builds a console program that drives
+`HSRadioOperationScheduler` with `MockRadioHardware`, so it runs on
+any developer machine without ALSA headers or the radio chip. It covers the
+serial FIFO order of atomic commands, FullBand and NextStation seeks, seek
+cancellation, the forced mute/restore around a seek, and hardware fault
+propagation.
+
+```sh
+mkdir build-test && cd build-test
+/path/to/Qt5.12/bin/qmake ../HSRadioManagerTest.pro
+make -j$(nproc)
+./hsradio_manager_test
+```
+
+The program prints a per-case trace, ends with `全部通过：N 项检查`
+(all checks passed) and exits with code 0; on failure it prints the failing
+line numbers and exits with code 1.
+
+The same target is available through CMake:
+
+```sh
+cmake .. -DCMAKE_PREFIX_PATH=/path/to/Qt5.12 \
+         -DHSRADIO_ENABLE_ALSA=OFF -DHSRADIO_BUILD_TESTS=ON
+cmake --build . --target hsradio_manager_test
+```
+
 This project builds a static library named `libhsradio_hardware.a` on Linux.
 
 For an i.MX9 cross-build, use the qmake/CMake configured for the i.MX9 Qt 5.12
@@ -93,7 +121,7 @@ and supplied via `HSRadioSAF775XConfig` (names default to the reference board).
 |-------------|-----------------|------------------------------------------------------|
 | `mode`      | `unsigned char` | 0=standby, 0x10=preset, 0x20=search, 0x70=read-back  |
 | `band`      | `unsigned char` | 0 = FM, 1 = AM                                       |
-| `freq`      | `unsigned int`  | kHz (FM 8700–10800)                                  |
+| `freq`      | `unsigned int`  | 10 kHz units: 8700 = 87.00 MHz, 10800 = 108.00 MHz                                  |
 | `usn`       | `unsigned int`  | signal quality                                       |
 | `wam`       | `unsigned char` | signal quality                                       |
 | `offset`    | `unsigned int`  | signal quality                                       |
