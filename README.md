@@ -20,6 +20,8 @@ SAF775X radio chip on the i.MX9 platform.
 
 ## Build
 
+All build commands are **out-of-source** and run inside `build/`. Build artifacts (`.o`, `moc_*`, `Makefile`, the binary, and runtime `radio_*.json`) stay under `build/` and never pollute the source tree. The `build/` directory is git-ignored.
+
 ### qmake
 
 Use the qmake executable from the Qt 5.12 kit configured for the target platform:
@@ -67,8 +69,8 @@ or the radio chip. Every action is selected on the command line and prints
 test suite and no assertion count.
 
 ```sh
-mkdir build-debug && cd build-debug
-/path/to/Qt5.12/bin/qmake ../HSRadioManagerTest.pro
+mkdir -p build/manager-test && cd build/manager-test
+/path/to/Qt5.12/bin/qmake ../../HSRadioManagerTest.pro
 make -j4
 ./hsradio_manager_test --help
 ```
@@ -208,8 +210,8 @@ the struct to match the driver before building.
 The test executable is built separately from the static-library project:
 
 ```sh
-mkdir build-test && cd build-test
-/path/to/Qt5.12/bin/qmake ../HSRadioHardwareTest.pro
+mkdir -p build/hardware-test && cd build/hardware-test
+/path/to/Qt5.12/bin/qmake ../../HSRadioHardwareTest.pro
 make -j$(nproc)
 ```
 
