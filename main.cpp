@@ -56,17 +56,6 @@ bool parseIntegerOption(const QCommandLineParser &parser,
     return true;
 }
 
-// --- 自动搜台业务（上层逻辑）---
-// 扫描循环、频率步进、阈值判定都属于本层；硬件接口只作为原子能力：
-//   tune(freq, Search) 静音扫描 + readSignalInfo() 读回信号质量。
-
-struct SeekThreshold {
-    int minRssi   = 21;   // 最低信号强度 (level)
-    int maxUsn    = 25;   // 最大 USN 噪声
-    int maxWam    = 25;   // 最大 WAM 邻频干扰
-    int maxOffset = 40;   // 最大频偏
-};
-
 // 参考驱动时序：调谐后需约 8ms PLL 锁定，再多次抽样(2ms 间隔)。
 // N 次抽样中累计 3 次无效即放弃；至少 1 次有效则判为有效电台。
 bool sampleStationValid(IRadioHardware &hw,
