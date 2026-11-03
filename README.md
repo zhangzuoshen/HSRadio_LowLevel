@@ -38,6 +38,25 @@ cmake .. -DCMAKE_PREFIX_PATH=/path/to/Qt5.12
 cmake --build .
 ```
 
+### Host build without ALSA (mock backend)
+
+On a developer machine without ALSA headers (e.g. Ubuntu) build with
+`HSRADIO_ENABLE_ALSA=OFF` (CMake) or `CONFIG+=hsradio_no_alsa` (qmake).
+Only the mock backend and the business layer are compiled; the real
+`HSRadioSAF775XBackend` is excluded. This is meant for compiling and
+debugging the manager / scheduler / storage layers without a radio chip.
+
+```sh
+# CMake
+cmake .. -DCMAKE_PREFIX_PATH=/path/to/Qt5.12 -DHSRADIO_ENABLE_ALSA=OFF
+
+# qmake
+/path/to/Qt5.12/bin/qmake CONFIG+=hsradio_no_alsa ../HSRadioHardware.pro
+```
+
+For an i.MX9 cross-build keep the default (`HSRADIO_ENABLE_ALSA` ON); the
+target sysroot must provide `alsa/asoundlib.h` and `libasound`.
+
 This project builds a static library named `libhsradio_hardware.a` on Linux.
 
 For an i.MX9 cross-build, use the qmake/CMake configured for the i.MX9 Qt 5.12
