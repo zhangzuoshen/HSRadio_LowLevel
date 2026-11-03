@@ -358,6 +358,7 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
 HSRadioOperationScheduler::HSRadioOperationScheduler(QObject *parent)
     : QObject(parent)
 {
+    ::registerHSRadioMetaTypes();
 }
 
 HSRadioOperationScheduler::~HSRadioOperationScheduler()

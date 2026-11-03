@@ -221,6 +221,7 @@ bool runAtom(Probe *probe, quint64 id, const QString &label, bool *anyFailed)
 int main(int argc, char *argv[])
 {
     QCoreApplication app(argc, argv);
+    ::registerHSRadioMetaTypes();  // 跨线程信号元类型注册（库内亦自注册，此处显式保险）
     QCoreApplication::setApplicationName(QStringLiteral("HSRadioManagerTest"));
     QCoreApplication::setApplicationVersion(QStringLiteral("1.0"));
 

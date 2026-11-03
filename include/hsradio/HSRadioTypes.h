@@ -110,3 +110,30 @@ Q_DECLARE_METATYPE(HSRadio::Station)
 Q_DECLARE_METATYPE(HSRadio::SeekMode)
 Q_DECLARE_METATYPE(HSRadio::SeekThreshold)
 Q_DECLARE_METATYPE(HSRadio::SeekRequest)
+
+// 运行期元类型注册：跨线程（调度器工作线程 -> 主线程）信号携带自定义
+// 类型时，Qt 队列连接要求目标类型已通过 qRegisterMetaType 注册，
+// 仅 Q_DECLARE_METATYPE 不足以支持排队连接。
+// 注意：moc 把信号形参以「无命名空间名」存入元数据（如 ErrorCode），
+// 队列连接按该名查找元类型，故每个类型须同时注册无命名空间别名。
+inline void registerHSRadioMetaTypes()
+{
+    qRegisterMetaType<HSRadio::Band>();
+    qRegisterMetaType<HSRadio::ErrorCode>();
+    qRegisterMetaType<HSRadio::Result>();
+    qRegisterMetaType<HSRadio::SignalInfo>();
+    qRegisterMetaType<HSRadio::HardwareState>();
+    qRegisterMetaType<HSRadio::Station>();
+    qRegisterMetaType<HSRadio::SeekMode>();
+    qRegisterMetaType<HSRadio::SeekThreshold>();
+    qRegisterMetaType<HSRadio::SeekRequest>();
+    qRegisterMetaType<HSRadio::Band>("Band");
+    qRegisterMetaType<HSRadio::ErrorCode>("ErrorCode");
+    qRegisterMetaType<HSRadio::Result>("Result");
+    qRegisterMetaType<HSRadio::SignalInfo>("SignalInfo");
+    qRegisterMetaType<HSRadio::HardwareState>("HardwareState");
+    qRegisterMetaType<HSRadio::Station>("Station");
+    qRegisterMetaType<HSRadio::SeekMode>("SeekMode");
+    qRegisterMetaType<HSRadio::SeekThreshold>("SeekThreshold");
+    qRegisterMetaType<HSRadio::SeekRequest>("SeekRequest");
+}
