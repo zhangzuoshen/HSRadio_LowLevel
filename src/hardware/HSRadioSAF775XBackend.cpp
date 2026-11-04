@@ -6,7 +6,6 @@
 #include <alsa/asoundlib.h>
 
 #include <cstring>
-#include <limits>
 #include <memory>
 #include <utility>
 
@@ -440,23 +439,11 @@ Result HSRadioSAF775XBackend::readState(HardwareState &state)
     if (!m_initialized)
         return Result::failure(ErrorCode::HardwareNotReady, QStringLiteral("Hardware not initialized"));
 
-    // 优先采用硬件值；若
-    // 读回不可用或返回不合理数据，则回退到上次下发的状态。
-    HSRadioSAF775XTune tune{};
-    const bool tuned = readTune(tune).ok();
-
-    if (tuned && tune.band == 0)
-        state.band = Band::FM;
-    else if (tuned && tune.band == 1)
-        state.band = Band::AM;
-    else
-        state.band = m_currentBand;
-
-    if (tuned && tune.freq > 0 &&
-        tune.freq <= static_cast<unsigned int>(std::numeric_limits<int>::max()))
-        state.frequencyKHz = static_cast<int>(tune.freq) * 10;  // 10 kHz 单位 → kHz
-    else
-        state.frequencyKHz = m_currentFreqKHz;
+    // 驱动在 read-back 模式下不返回频率/频段（freq 固定为 0xFFFF），
+    // 这两项是写入侧参数，直接以后端最近一次下发值为准。
+    // readTune() 只供 readSignalInfo() 读取立体声、信号强度等信号字段。
+    state.band = m_currentBand;
+    state.frequencyKHz = m_currentFreqKHz;
 
     bool muted = m_currentMuted;
     if (readMute(muted).ok())
