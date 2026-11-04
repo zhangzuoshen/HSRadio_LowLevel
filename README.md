@@ -88,7 +88,7 @@ Scheduler commands (executed in this order when given):
 | Option | Maps to |
 |---|---|
 | `--set-band FM / AM` | `submitSetBand` |
-| `--set-frequency kHz` (+`--search`) | `submitTune` with Preset / Search mode |
+| `--set-frequency kHz` (+`--search`) | `submitTune` with Preset / Search mode; repeatable, tunes in order and reads back state/signal for each frequency |
 | `--set-mute on / off` | `submitSetMute` |
 | (default) | `submitReadState` + `submitReadSignal`, skip with `--no-read` |
 | `--seek` | `submitSeek`, plus `cancelSeek` when `--seek-cancel-after` is set |

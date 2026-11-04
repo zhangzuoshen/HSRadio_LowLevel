@@ -184,7 +184,7 @@ int main(int argc, char *argv[])
         QStringLiteral("FM|AM"));
     const QCommandLineOption setFrequencyOption(
         QStringLiteral("set-frequency"),
-        QStringLiteral("submitTune: tune to a frequency in kHz."),
+        QStringLiteral("submitTune: tune to a frequency in kHz; repeatable, executed in order."),
         QStringLiteral("kHz"));
     const QCommandLineOption searchOption(
         QStringLiteral("search"),
@@ -528,21 +528,45 @@ int main(int argc, char *argv[])
     }
 
     if (parser.isSet(setFrequencyOption)) {
-        int frequencyKHz = 0;
-        if (!parseIntegerOption(parser, setFrequencyOption, &frequencyKHz)) {
-            qCritical() << "Invalid --set-frequency value.";
-            anyFailed = true;
-        } else {
-            const bool inSearchMode = parser.isSet(searchOption);
-            const IRadioHardware::TuneMode mode = inSearchMode
-                ? IRadioHardware::TuneMode::Search
-                : IRadioHardware::TuneMode::Preset;
-            runAtom(&probe, scheduler.submitTune(frequencyKHz, mode),
-                    QStringLiteral("submitTune(%1 kHz, %2)")
-                        .arg(frequencyKHz)
-                        .arg(inSearchMode ? QStringLiteral("Search")
-                                          : QStringLiteral("Preset")),
-                    &anyFailed);
+        const bool inSearchMode = parser.isSet(searchOption);
+        const IRadioHardware::TuneMode mode = inSearchMode
+            ? IRadioHardware::TuneMode::Search
+            : IRadioHardware::TuneMode::Preset;
+        // 可重复传入：按命令行顺序依次调谐，每个频点回读状态与信号便于对照。
+        for (const QString &text : parser.values(setFrequencyOption)) {
+            bool ok = false;
+            const int frequencyKHz = text.trimmed().toInt(&ok);
+            if (!ok) {
+                qCritical() << "Invalid --set-frequency value:" << text;
+                anyFailed = true;
+                continue;
+            }
+            if (!runAtom(&probe, scheduler.submitTune(frequencyKHz, mode),
+                         QStringLiteral("submitTune(%1 kHz, %2)")
+                             .arg(frequencyKHz)
+                             .arg(inSearchMode ? QStringLiteral("Search")
+                                               : QStringLiteral("Preset")),
+                         &anyFailed))
+                continue;
+
+            const quint64 stateId = scheduler.submitReadState();
+            if (runAtom(&probe, stateId,
+                        QStringLiteral("submitReadState(%1 kHz)").arg(frequencyKHz),
+                        &anyFailed)) {
+                const HardwareState state = probe.states.value(stateId);
+                qInfo().noquote()
+                    << QStringLiteral("  state: band=%1, frequency=%2 kHz, mute=%3")
+                           .arg(bandName(state.band))
+                           .arg(state.frequencyKHz)
+                           .arg(state.muted ? QStringLiteral("on") : QStringLiteral("off"));
+            }
+            const quint64 signalId = scheduler.submitReadSignal();
+            if (runAtom(&probe, signalId,
+                        QStringLiteral("submitReadSignal(%1 kHz)").arg(frequencyKHz),
+                        &anyFailed))
+                qInfo().noquote()
+                    << QStringLiteral("  signal: %1")
+                           .arg(signalText(probe.signalInfos.value(signalId)));
         }
     }
 
@@ -844,6 +868,8 @@ int main(int argc, char *argv[])
                 const bool up = !parser.isSet(managerSeekDownOption);
                 const SeekMode mode = (parser.value(managerSeekModeOption).trimmed().toLower()
                     == QStringLiteral("next")) ? SeekMode::NextStation : SeekMode::FullBand;
+                QElapsedTimer mgrSeekTimer;
+                mgrSeekTimer.start();
                 manager.startSeek(up, mode);
                 int cancelAfter = 0;
                 if (parser.isSet(managerSeekCancelAfterOption))
@@ -854,9 +880,13 @@ int main(int argc, char *argv[])
                         scheduler.cancelSeek();
                     });
                 if (waitUntil([&](){ return mgrSeekDone; }, 120000)) {
-                    qInfo().noquote() << QStringLiteral("[MGR][SEEK] summary: found=%1 stop=%2")
-                        .arg(mgrSeekFound ? QStringLiteral("true") : QStringLiteral("false"))
-                        .arg(mgrSeekFinal);
+                    const qint64 elapsedMs = mgrSeekTimer.elapsed();
+                    qInfo().noquote()
+                        << QStringLiteral("[MGR][SEEK] summary: found=%1 stop=%2 elapsed=%3 s (%4 ms)")
+                            .arg(mgrSeekFound ? QStringLiteral("true") : QStringLiteral("false"))
+                            .arg(mgrSeekFinal)
+                            .arg(elapsedMs / 1000.0, 0, 'f', 2)
+                            .arg(elapsedMs);
                 } else {
                     qCritical().noquote() << "[FAIL] manager.startSeek | timed out";
                     anyFailed = true;
