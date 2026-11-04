@@ -54,3 +54,6 @@ compile_commands.json
 *creator.user*
 
 *_qmlcache.qrc
+
+# 隐藏文件和目录（以 . 开头）默认不提交
+.*
