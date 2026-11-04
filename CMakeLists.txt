@@ -73,6 +73,10 @@ if(HSRADIO_BUILD_TESTS)
         PRIVATE hsradio_hardware
     )
 
+    if(HSRADIO_ENABLE_ALSA)
+        target_compile_definitions(hsradio_manager_test PRIVATE HSRADIO_ENABLE_ALSA)
+    endif()
+
     target_compile_options(hsradio_manager_test PRIVATE
         $<$<CXX_COMPILER_ID:GNU,Clang>:-Wall -Wextra -Wpedantic>
     )

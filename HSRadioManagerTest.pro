@@ -40,3 +40,14 @@ HEADERS += \
 unix:!macx {
     QMAKE_CXXFLAGS += -Wall -Wextra -Wpedantic
 }
+
+# 真实 ALSA 后端：默认编译；CONFIG+=hsradio_no_alsa 时排除（仅 Mock）。
+# 与 HSRadioHardware.pro 保持一致——交叉编译/目标平台编入 SAF775X，宿主无 ALSA 头时排除。
+!contains(CONFIG, hsradio_no_alsa) {
+    DEFINES += HSRADIO_ENABLE_ALSA
+    HEADERS += $$PWD/include/hsradio/hardware/HSRadioSAF775XBackend.h
+    SOURCES += $$PWD/src/hardware/HSRadioSAF775XBackend.cpp
+    unix:!macx {
+        LIBS += -lasound
+    }
+}
