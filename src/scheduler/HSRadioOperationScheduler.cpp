@@ -5,6 +5,7 @@
 
 #include <QMutex>
 #include <QMutexLocker>
+#include <QObject>
 #include <QThread>
 #include <QtGlobal>
 #include <QWaitCondition>
@@ -384,6 +385,22 @@ Result HSRadioOperationScheduler::initialize(std::unique_ptr<IRadioHardware> har
                                QStringLiteral("调度器已经初始化，不能重复初始化"));
 
     m_worker = new Worker(this);
+
+    // 真实后端（如 HSRadioSAF775XBackend）是 QObject 子类，会校验调用线程与
+    // QObject::thread() 一致。调度器接管所有权后所有硬件调用都发生在工作线程，
+    // 因此在这里一并迁移线程亲和性；Mock 等非 QObject 实现无需迁移。
+    // 本方法在主线程执行，符合 moveToThread 必须在对象当前所属线程调用的要求。
+    if (QObject *object = dynamic_cast<QObject *>(hardware.get())) {
+        // 带 parent 的对象无法迁移线程，且父子关系会与 unique_ptr 重复管理生命周期。
+        if (object->parent()) {
+            delete m_worker;
+            m_worker = nullptr;
+            return Result::failure(ErrorCode::InvalidParameter,
+                                   QStringLiteral("硬件对象不能带 QObject parent"));
+        }
+        object->moveToThread(m_worker);
+    }
+
     m_worker->attach(std::move(hardware));
     m_worker->start();
     HSRADIO_LOG_INFO(hsradioManager).noquote() << "scheduler initialized, hardware attached";
@@ -401,9 +418,9 @@ Result HSRadioOperationScheduler::initialize(std::unique_ptr<IRadioHardware> har
 
 void HSRadioOperationScheduler::shutdown()
 {
-    HSRADIO_LOG_INFO(hsradioManager).noquote() << "shutdown";
     if (!m_worker)
         return;
+    HSRADIO_LOG_INFO(hsradioManager).noquote() << "shutdown";
 
     // 先摘下指针，避免 shutdown 期间新的提交还在用工作对象。
     Worker *worker = m_worker;
