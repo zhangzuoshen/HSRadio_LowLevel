@@ -141,7 +141,7 @@ void HSRadioOperationScheduler::Worker::run()
 void HSRadioOperationScheduler::Worker::execute(const Command &command)
 {
     if (!m_hardware) {
-        qCWarning(hsradioManager).noquote() << "execute: no hardware, op" << command.id << "HardwareNotReady";
+        HSRADIO_LOG_WARNING(hsradioManager).noquote() << "execute: no hardware, op" << command.id << "HardwareNotReady";
         emit m_owner->operationFinished(command.id, ErrorCode::HardwareNotReady);
         return;
     }
@@ -271,7 +271,7 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
         return;
     }
 
-    qCInfo(hsradioManager).noquote() << "seek started id=" << id << "mode=" << (request.mode == SeekMode::FullBand ? "full" : "next");
+    HSRADIO_LOG_INFO(hsradioManager).noquote() << "seek started id=" << id << "mode=" << (request.mode == SeekMode::FullBand ? "full" : "next");
     emit m_owner->seekStarted(id);
 
     const Result bandResult = m_hardware->setBand(request.band);
@@ -289,7 +289,7 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
         HardwareState state;
         if (m_hardware->readState(state).ok() && !state.muted) {
             restoreMute = m_hardware->setMute(true).ok();
-            qCDebug(hsradioManager).noquote() << "seek: forced mute on during seek";
+            HSRADIO_LOG_DEBUG(hsradioManager).noquote() << "seek: forced mute on during seek";
         }
     }
 
@@ -316,7 +316,7 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
 
     for (int i = 0; i < totalPoints; ++i) {
         if (m_cancelSeek.load()) {
-            qCInfo(hsradioManager).noquote() << "seek cancelled at" << frequency << "kHz";
+            HSRADIO_LOG_INFO(hsradioManager).noquote() << "seek cancelled at" << frequency << "kHz";
             break;
         }
 
@@ -358,7 +358,7 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
     if (restoreMute)
         m_hardware->setMute(false);
 
-    qCInfo(hsradioManager).noquote() << "seek finished id=" << id << "stop=" << stopFrequency << "kHz found=" << found;
+    HSRADIO_LOG_INFO(hsradioManager).noquote() << "seek finished id=" << id << "stop=" << stopFrequency << "kHz found=" << found;
     emit m_owner->seekFinished(id, stopFrequency, found);
     emit m_owner->operationFinished(id, code);
 }
@@ -386,7 +386,7 @@ Result HSRadioOperationScheduler::initialize(std::unique_ptr<IRadioHardware> har
     m_worker = new Worker(this);
     m_worker->attach(std::move(hardware));
     m_worker->start();
-    qCInfo(hsradioManager).noquote() << "scheduler initialized, hardware attached";
+    HSRADIO_LOG_INFO(hsradioManager).noquote() << "scheduler initialized, hardware attached";
 
     Command command;
     command.type = CommandType::Initialize;
@@ -401,7 +401,7 @@ Result HSRadioOperationScheduler::initialize(std::unique_ptr<IRadioHardware> har
 
 void HSRadioOperationScheduler::shutdown()
 {
-    qCInfo(hsradioManager).noquote() << "shutdown";
+    HSRADIO_LOG_INFO(hsradioManager).noquote() << "shutdown";
     if (!m_worker)
         return;
 

@@ -156,7 +156,7 @@ Result HSRadioSAF775XBackend::openControl()
     const int rc = snd_ctl_open(&m_ctl, deviceName.constData(), 0);
     if (rc < 0) {
         m_ctl = nullptr;
-        qCWarning(hsradioHardwareSaf775x).noquote() << "snd_ctl_open failed for device" << m_config.device;
+        HSRADIO_LOG_WARNING(hsradioHardwareSaf775x).noquote() << "snd_ctl_open failed for device" << m_config.device;
         return alsaFailure(ErrorCode::AlsaOpenFailed,
                            QStringLiteral("snd_ctl_open('%1')").arg(m_config.device), rc);
     }
@@ -237,7 +237,7 @@ Result HSRadioSAF775XBackend::initialize()
     }
 
     m_initialized = true;
-    qCInfo(hsradioHardwareSaf775x).noquote() << "initialized; device=" << m_config.device;
+    HSRADIO_LOG_INFO(hsradioHardwareSaf775x).noquote() << "initialized; device=" << m_config.device;
     return Result::success();
 }
 
@@ -272,7 +272,7 @@ Result HSRadioSAF775XBackend::applyTune()
 
     const int rc = snd_ctl_elem_write(m_ctl, elem.get());
     if (rc < 0) {
-        qCWarning(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
+        HSRADIO_LOG_WARNING(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
         return alsaFailure(ErrorCode::AlsaWriteFailed,
                            QStringLiteral("snd_ctl_elem_write('%1')").arg(m_config.tuneControl), rc);
     }
@@ -311,14 +311,14 @@ Result HSRadioSAF775XBackend::readTune(HSRadioSAF775XTune &out)
     // 写入读回请求，然后再读回填充后的结构体。
     int rc = snd_ctl_elem_write(m_ctl, elem.get());
     if (rc < 0) {
-        qCWarning(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
+        HSRADIO_LOG_WARNING(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
         return alsaFailure(ErrorCode::AlsaWriteFailed,
                            QStringLiteral("snd_ctl_elem_write('%1')").arg(m_config.tuneControl), rc);
     }
 
     rc = snd_ctl_elem_read(m_ctl, elem.get());
     if (rc < 0) {
-        qCWarning(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
+        HSRADIO_LOG_WARNING(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
         return alsaFailure(ErrorCode::AlsaReadFailed,
                            QStringLiteral("snd_ctl_elem_read('%1')").arg(m_config.tuneControl), rc);
     }
@@ -363,7 +363,7 @@ Result HSRadioSAF775XBackend::writeMute(bool muted)
 
     const int rc = snd_ctl_elem_write(m_ctl, elem.get());
     if (rc < 0) {
-        qCWarning(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
+        HSRADIO_LOG_WARNING(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
         return alsaFailure(ErrorCode::AlsaWriteFailed,
                            QStringLiteral("snd_ctl_elem_write('%1')").arg(m_config.muteControl), rc);
     }
@@ -389,7 +389,7 @@ Result HSRadioSAF775XBackend::readMute(bool &muted) const
 
     const int rc = snd_ctl_elem_read(m_ctl, elem.get());
     if (rc < 0) {
-        qCWarning(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
+        HSRADIO_LOG_WARNING(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
         return alsaFailure(ErrorCode::AlsaReadFailed,
                            QStringLiteral("snd_ctl_elem_read('%1')").arg(m_config.muteControl), rc);
     }
@@ -405,7 +405,7 @@ Result HSRadioSAF775XBackend::setBand(Band band)
     if (!threadResult.ok()) return threadResult;
     if (band != Band::FM && band != Band::AM)
         return Result::failure(ErrorCode::InvalidParameter, QStringLiteral("Invalid radio band"));
-    qCInfo(hsradioHardwareSaf775x).noquote() << "setBand" << (band == Band::AM ? "AM" : "FM");
+    HSRADIO_LOG_INFO(hsradioHardwareSaf775x).noquote() << "setBand" << (band == Band::AM ? "AM" : "FM");
     m_currentBand = band;
     return applyTune();
 }
@@ -418,7 +418,7 @@ Result HSRadioSAF775XBackend::tune(int frequencyKHz, TuneMode mode)
         return Result::failure(ErrorCode::InvalidParameter, QStringLiteral("Frequency must be positive kHz"));
     m_currentFreqKHz = frequencyKHz;
     m_currentTuneMode = mode;
-    qCInfo(hsradioHardwareSaf775x).noquote() << "tune" << frequencyKHz << "kHz mode="
+    HSRADIO_LOG_INFO(hsradioHardwareSaf775x).noquote() << "tune" << frequencyKHz << "kHz mode="
                                              << (mode == IRadioHardware::TuneMode::Search ? "search" : "preset");
     return applyTune();
 }
@@ -427,7 +427,7 @@ Result HSRadioSAF775XBackend::setMute(bool muted)
 {
     const Result threadResult = checkThread();
     if (!threadResult.ok()) return threadResult;
-    qCInfo(hsradioHardwareSaf775x).noquote() << "setMute" << muted;
+    HSRADIO_LOG_INFO(hsradioHardwareSaf775x).noquote() << "setMute" << muted;
     Result result = writeMute(muted);
     if (result.ok()) m_currentMuted = muted;
     return result;

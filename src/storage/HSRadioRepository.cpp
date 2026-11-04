@@ -84,7 +84,7 @@ Result HSRadioRepository::load()
     bool exists = false;
     const Result r = readJsonFile(m_configFilePath, &doc, &exists);
     if (!r.ok()) {
-        qCWarning(hsradioStorageRepository).noquote() << "config load failed:" << r.message;
+        HSRADIO_LOG_WARNING(hsradioStorageRepository).noquote() << "config load failed:" << r.message;
         return r;
     }
     if (!exists) {
@@ -101,7 +101,7 @@ Result HSRadioRepository::load()
     }
     if (doc.isObject())
         parseFromJson(doc.object());
-    qCInfo(hsradioStorageRepository).noquote() << "config loaded; region=" << m_region;
+    HSRADIO_LOG_INFO(hsradioStorageRepository).noquote() << "config loaded; region=" << m_region;
     return Result::success();
 }
 
@@ -132,7 +132,7 @@ Result HSRadioRepository::save()
 
     const Result r = writeJsonFile(m_configFilePath, QJsonDocument(root));
     if (!r.ok())
-        qCCritical(hsradioStorageRepository).noquote() << "config save failed:" << r.message;
+        HSRADIO_LOG_CRITICAL(hsradioStorageRepository).noquote() << "config save failed:" << r.message;
     return r;
 }
 
@@ -148,7 +148,7 @@ Result HSRadioRepository::resetToDefault()
         }
     }
     setBuiltInDefaults();
-    qCInfo(hsradioStorageRepository).noquote() << "reset to default";
+    HSRADIO_LOG_INFO(hsradioStorageRepository).noquote() << "reset to default";
     return Result::success();
 }
 

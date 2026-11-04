@@ -15,3 +15,12 @@ Q_DECLARE_LOGGING_CATEGORY(hsradioHardwareMock)
 Q_DECLARE_LOGGING_CATEGORY(hsradioHardwareSaf775x)
 Q_DECLARE_LOGGING_CATEGORY(hsradioStorageStore)
 Q_DECLARE_LOGGING_CATEGORY(hsradioStorageRepository)
+
+// Qt 5.12 的 qC*(cat, ...) 是可变参数宏；只用流式输出而不传可变参数时，
+// -Wpedantic 会报 "ISO C++11 requires at least one argument for the ... in a variadic macro"。
+// 统一经下列宏补一个空的可变参数，展开后仍走 QMessageLogger 的无参流式重载，
+// 日志类别、级别与输出内容均不变；新增日志一律使用 HSRADIO_LOG_*。
+#define HSRADIO_LOG_DEBUG(cat)    qCDebug(cat, )
+#define HSRADIO_LOG_INFO(cat)     qCInfo(cat, )
+#define HSRADIO_LOG_WARNING(cat)  qCWarning(cat, )
+#define HSRADIO_LOG_CRITICAL(cat) qCCritical(cat, )
