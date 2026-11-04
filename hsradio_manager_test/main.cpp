@@ -5,8 +5,8 @@
 // 后端是 MockRadioHardware，因此不需要 ALSA、不需要 i.MX9 真机。
 //
 //   ./hsradio_manager_test --help
-//   ./hsradio_manager_test --mock-demo --set-band FM --set-frequency 87500
-//   ./hsradio_manager_test --mock-demo --seek --seek-lock-ms 0 --seek-sample-ms 0
+//   ./hsradio_manager_test --set-band FM --set-frequency 87500
+//   ./hsradio_manager_test --seek --seek-lock-ms 0 --seek-sample-ms 0
 
 #include "hsradio/HSRadioTypes.h"
 #include "hsradio/hardware/MockRadioHardware.h"
@@ -57,31 +57,6 @@ QString errorCodeName(ErrorCode code)
     return QStringLiteral("UnknownError");
 }
 
-bool parseErrorCode(const QString &text, ErrorCode *code)
-{
-    const QString name = text.trimmed();
-    const QStringList names = {
-        QStringLiteral("None"), QStringLiteral("InvalidParameter"),
-        QStringLiteral("HardwareNotReady"), QStringLiteral("AlsaOpenFailed"),
-        QStringLiteral("AlsaControlNotFound"), QStringLiteral("AlsaControlTypeUnsupported"),
-        QStringLiteral("AlsaReadFailed"), QStringLiteral("AlsaWriteFailed"),
-        QStringLiteral("HardwareOperationFailed")
-    };
-    const QVector<ErrorCode> codes = {
-        ErrorCode::None, ErrorCode::InvalidParameter,
-        ErrorCode::HardwareNotReady, ErrorCode::AlsaOpenFailed,
-        ErrorCode::AlsaControlNotFound, ErrorCode::AlsaControlTypeUnsupported,
-        ErrorCode::AlsaReadFailed, ErrorCode::AlsaWriteFailed,
-        ErrorCode::HardwareOperationFailed
-    };
-    for (int i = 0; i < names.size(); ++i) {
-        if (name.compare(names.at(i), Qt::CaseInsensitive) == 0) {
-            *code = codes.at(i);
-            return true;
-        }
-    }
-    return false;
-}
 
 bool parseIntegerOption(const QCommandLineParser &parser,
                         const QCommandLineOption &option,
@@ -108,46 +83,6 @@ bool reportResult(const QString &operation, ErrorCode code, const QString &detai
     return false;
 }
 
-SignalInfo defaultStationSignal()
-{
-    SignalInfo info;
-    info.rssi = 40;
-    info.usn = 5;
-    info.wam = 5;
-    info.offset = 10;
-    info.stereo = true;
-    info.hasRssi = true;
-    info.hasUsn = true;
-    info.hasWam = true;
-    info.hasOffset = true;
-    info.hasStereo = true;
-    return info;
-}
-
-// --mock-station 87500[:rssi:usn:wam:offset]
-bool parseMockStation(const QString &text, int *frequencyKHz, SignalInfo *info)
-{
-    const QStringList parts = text.split(QLatin1Char(':'));
-    if (parts.isEmpty())
-        return false;
-
-    bool ok = false;
-    *frequencyKHz = parts.at(0).toInt(&ok);
-    if (!ok)
-        return false;
-
-    *info = defaultStationSignal();
-    int *targets[] = { &info->rssi, &info->usn, &info->wam, &info->offset };
-    for (int i = 0; i < 4; ++i) {
-        if (parts.size() <= i + 1)
-            break;
-        const int value = parts.at(i + 1).toInt(&ok);
-        if (!ok)
-            return false;
-        *targets[i] = value;
-    }
-    return true;
-}
 
 QString bandName(Band band)
 {
@@ -232,58 +167,15 @@ int main(int argc, char *argv[])
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
-        QStringLiteral("HSRadio scheduler/manager interface debug tool (MockRadioHardware by default; --saf775x uses the real SAF775X ALSA backend when built with ALSA)."));
+        QStringLiteral("HSRadio scheduler/manager interface debug tool. Default backend is MockRadioHardware; use --saf775x to select the real SAF775X ALSA backend (ALSA build only)."));
     parser.addHelpOption();
     parser.addVersionOption();
 
-    // —— Mock 配置 ——
-    const QCommandLineOption mockStationOption(
-        QStringLiteral("mock-station"),
-        QStringLiteral("Preset a valid station: kHz[:rssi:usn:wam:offset]. Repeatable."),
-        QStringLiteral("spec"));
-    const QCommandLineOption mockDemoOption(
-        QStringLiteral("mock-demo"),
-        QStringLiteral("Preset three demo stations (87500, 98000, 104800 kHz)."));
-    const QCommandLineOption mockFailureOption(
-        QStringLiteral("mock-failure"),
-        QStringLiteral("Inject a tune failure, e.g. AlsaWriteFailed / HardwareNotReady (default: None)."),
-        QStringLiteral("ErrorCode"),
-        QStringLiteral("None"));
 
     // —— 真实 SAF775X ALSA 后端选项（仅当以 ALSA 方式编译时可用）——
     const QCommandLineOption saf775xOption(
         QStringLiteral("saf775x"),
         QStringLiteral("Use the real SAF775X ALSA backend instead of Mock (requires ALSA build)."));
-    const QCommandLineOption safDeviceOption(
-        QStringLiteral("device"),
-        QStringLiteral("ALSA control device (default: default)."),
-        QStringLiteral("name"),
-        QStringLiteral("default"));
-    const QCommandLineOption safTuneControlOption(
-        QStringLiteral("tune-control"),
-        QStringLiteral("Tune BYTES control name (default: Radiocontrol)."),
-        QStringLiteral("name"),
-        QStringLiteral("Radiocontrol"));
-    const QCommandLineOption safMuteControlOption(
-        QStringLiteral("mute-control"),
-        QStringLiteral("Mute control name (default: Mute_radio)."),
-        QStringLiteral("name"),
-        QStringLiteral("Mute_radio"));
-    const QCommandLineOption safRegControlOption(
-        QStringLiteral("reg-control"),
-        QStringLiteral("Reg BYTES control name (optional, default: empty)."),
-        QStringLiteral("name"),
-        QStringLiteral(""));
-    const QCommandLineOption safMuteOffValueOption(
-        QStringLiteral("mute-off-value"),
-        QStringLiteral("Value meaning unmuted (default: 0)."),
-        QStringLiteral("int"),
-        QStringLiteral("0"));
-    const QCommandLineOption safMuteOnValueOption(
-        QStringLiteral("mute-on-value"),
-        QStringLiteral("Value meaning muted (default: 1)."),
-        QStringLiteral("int"),
-        QStringLiteral("1"));
 
     // —— 原子命令 ——
     const QCommandLineOption setBandOption(
@@ -391,16 +283,7 @@ int main(int argc, char *argv[])
         QStringLiteral("no-progress"),
         QStringLiteral("Do not print per-step seek progress."));
 
-    parser.addOption(mockStationOption);
-    parser.addOption(mockDemoOption);
-    parser.addOption(mockFailureOption);
     parser.addOption(saf775xOption);
-    parser.addOption(safDeviceOption);
-    parser.addOption(safTuneControlOption);
-    parser.addOption(safMuteControlOption);
-    parser.addOption(safRegControlOption);
-    parser.addOption(safMuteOffValueOption);
-    parser.addOption(safMuteOnValueOption);
     parser.addOption(setBandOption);
     parser.addOption(setFrequencyOption);
     parser.addOption(searchOption);
@@ -534,7 +417,6 @@ int main(int argc, char *argv[])
 
     // —— 组装硬件后端（默认 Mock；--saf775x 选用真实 SAF775X ALSA 后端）——
     std::unique_ptr<IRadioHardware> hardware;
-    MockRadioHardware *mock = nullptr;
     QString backendLabel;
 
     bool wantSaf775x = false;
@@ -550,62 +432,21 @@ int main(int argc, char *argv[])
 
     if (!wantSaf775x) {
         backendLabel = QStringLiteral("initialize(MockRadioHardware)");
-        auto *m = new MockRadioHardware;
-        mock = m;
-        hardware.reset(m);
-        int presetCount = 0;
-    if (parser.isSet(mockDemoOption)) {
-        mock->setStationSignal(87500, defaultStationSignal());
-        mock->setStationSignal(98000, defaultStationSignal());
-        mock->setStationSignal(104800, defaultStationSignal());
-        presetCount += 3;
-    }
-    for (const QString &text : parser.values(mockStationOption)) {
-        int frequencyKHz = 0;
-        SignalInfo info;
-        if (!parseMockStation(text, &frequencyKHz, &info)) {
-            qCritical().noquote() << "Invalid --mock-station value:" << text;
-            return 2;
-        }
-        mock->setStationSignal(frequencyKHz, info);
-        ++presetCount;
-    }
-
-    ErrorCode injectedFailure = ErrorCode::None;
-    if (!parseErrorCode(parser.value(mockFailureOption), &injectedFailure)) {
-        qCritical().noquote() << "Invalid --mock-failure value:" << parser.value(mockFailureOption);
-        return 2;
-    }
-    mock->setTuneFailure(injectedFailure);
-
-    qInfo().noquote()
-        << QStringLiteral("Backend: MockRadioHardware | preset stations: %1 (--mock-demo / --mock-station)")
-
-               .arg(presetCount);
-    qInfo().noquote()
-        << QStringLiteral("Injected tune failure: %1").arg(errorCodeName(injectedFailure));
-
-    // —— 启动调度器 ——
+        hardware.reset(new MockRadioHardware);
+        qInfo().noquote() << QStringLiteral("Backend: MockRadioHardware (default)");
     } else {
 #if defined(HSRADIO_ENABLE_ALSA)
-        bool numericOk = false;
-        HSRadioSAF775XConfig safConfig;
-        safConfig.device = parser.value(safDeviceOption);
-        safConfig.tuneControl = parser.value(safTuneControlOption);
-        safConfig.muteControl = parser.value(safMuteControlOption);
-        safConfig.regControl = parser.value(safRegControlOption);
-        safConfig.muteOffValue = parser.value(safMuteOffValueOption).toLong(&numericOk);
-        safConfig.muteOnValue = parser.value(safMuteOnValueOption).toLong(&numericOk);
+        HSRadioSAF775XConfig safConfig;   // 全部走默认值
         hardware.reset(new HSRadioSAF775XBackend(safConfig));
         backendLabel = QStringLiteral("initialize(HSRadioSAF775XBackend)");
         qInfo().noquote()
-            << QStringLiteral("Backend: HSRadioSAF775XBackend (ALSA) | device=%1 tune=%2 mute=%3")
-                   .arg(safConfig.device, safConfig.tuneControl, safConfig.muteControl);
+            << QStringLiteral("Backend: HSRadioSAF775XBackend (ALSA, defaults)");
 #else
         qCritical().noquote() << "[FAIL] --saf775x requested but this build has no ALSA backend.";
         return 2;
 #endif
     }
+
 
     HSRadioOperationScheduler scheduler;
     Probe probe;
@@ -1027,22 +868,6 @@ int main(int argc, char *argv[])
             .arg(stateFile).arg(configFile);
     }
 
-    // —— Mock 观测点：验证调谐模式与"搜台强制静音/恢复"——
-    if (mock) {
-    qInfo().noquote()
-        << QStringLiteral("[MOCK] lastTuneMode=%1 muteCallCount=%2")
-               .arg(mock->lastTuneMode() == IRadioHardware::TuneMode::Search
-                        ? QStringLiteral("Search")
-                        : QStringLiteral("Preset"))
-               .arg(mock->muteCallCount());
-    HardwareState finalState;
-    mock->readState(finalState);
-    qInfo().noquote()
-        << QStringLiteral("[MOCK] final: band=%1 frequency=%2 kHz mute=%3")
-               .arg(bandName(finalState.band))
-               .arg(finalState.frequencyKHz)
-               .arg(finalState.muted ? QStringLiteral("on") : QStringLiteral("off"));
-    }
 
     scheduler.shutdown();
     return anyFailed ? 1 : 0;
