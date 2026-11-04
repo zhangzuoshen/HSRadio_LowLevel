@@ -77,12 +77,13 @@ void HSRadioManager::connectScheduler()
 
     QObject::connect(m_scheduler, &HSRadioOperationScheduler::stateRead,
                      this, [this](quint64, const HardwareState &state) {
-                         m_currentBand = state.band;
-                         m_currentFrequencyKHz = state.frequencyKHz;
+                         // 频率/频段以 Manager 的设置值为准（客户端读取的就是这个值），
+                         // 读回只用于同步静音状态，不再覆盖缓存或重复广播变更信号。
                          m_muted = state.muted;
-                         emit stateChanged(state);
-                         emit bandChanged(state.band);
-                         emit frequencyChanged(state.frequencyKHz);
+                         HardwareState current = state;
+                         current.band = m_currentBand;
+                         current.frequencyKHz = m_currentFrequencyKHz;
+                         emit stateChanged(current);
                      });
 
     QObject::connect(m_scheduler, &HSRadioOperationScheduler::signalRead,
@@ -137,10 +138,19 @@ void HSRadioManager::shutdown()
 {
     if (m_refreshTimer)
         m_refreshTimer->stop();
-    if (m_store)
-        m_store->save();
-    if (m_repository)
-        m_repository->save();
+    // 保存失败必须显式告警，避免上层误以为状态已经落盘。
+    if (m_store) {
+        const Result result = m_store->save();
+        if (!result.ok())
+            HSRADIO_LOG_WARNING(hsradioManager).noquote()
+                << "state save failed:" << result.message;
+    }
+    if (m_repository) {
+        const Result result = m_repository->save();
+        if (!result.ok())
+            HSRADIO_LOG_WARNING(hsradioManager).noquote()
+                << "config save failed:" << result.message;
+    }
 }
 
 Result HSRadioManager::restoreLastState()

@@ -20,6 +20,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QElapsedTimer>
+#include <QFile>
 #include <QEventLoop>
 #include <QHash>
 #include <QObject>
@@ -792,25 +793,36 @@ int main(int argc, char *argv[])
                 reportResult(QStringLiteral("manager.factoryReset()"), manager.factoryReset().code, QString());
             if (parser.isSet(managerSetBandOption)) {
                 const QString t = parser.value(managerSetBandOption).trimmed().toUpper();
-                if (t == QStringLiteral("FM") || t == QStringLiteral("AM"))
-                    manager.setBand(t == QStringLiteral("FM") ? Band::FM : Band::AM);
-                else { qCritical() << "Invalid --manager-set-band"; anyFailed = true; }
+                if (t == QStringLiteral("FM") || t == QStringLiteral("AM")) {
+                    const Band b = t == QStringLiteral("FM") ? Band::FM : Band::AM;
+                    runAtom(&probe, manager.setBand(b),
+                            QStringLiteral("manager.setBand(%1)").arg(bandName(b)), &anyFailed);
+                } else { qCritical() << "Invalid --manager-set-band"; anyFailed = true; }
             }
             if (parser.isSet(managerSetFrequencyOption)) {
                 int f = 0;
                 if (parseIntegerOption(parser, managerSetFrequencyOption, &f))
-                    manager.setFrequency(f);
+                    runAtom(&probe, manager.setFrequency(f),
+                            QStringLiteral("manager.setFrequency(%1 kHz)").arg(f), &anyFailed);
                 else { qCritical() << "Invalid --manager-set-frequency"; anyFailed = true; }
             }
-            if (parser.isSet(managerStepUpOption)) manager.stepUp();
-            if (parser.isSet(managerStepDownOption)) manager.stepDown();
+            if (parser.isSet(managerStepUpOption))
+                runAtom(&probe, manager.stepUp(), QStringLiteral("manager.stepUp()"), &anyFailed);
+            if (parser.isSet(managerStepDownOption))
+                runAtom(&probe, manager.stepDown(), QStringLiteral("manager.stepDown()"), &anyFailed);
             if (parser.isSet(managerSetMuteOption)) {
                 const QString t = parser.value(managerSetMuteOption).trimmed().toLower();
-                if (t == QStringLiteral("on") || t == QStringLiteral("off"))
-                    manager.setMute(t == QStringLiteral("on"));
-                else { qCritical() << "Invalid --manager-set-mute"; anyFailed = true; }
+                if (t == QStringLiteral("on") || t == QStringLiteral("off")) {
+                    const bool muted = t == QStringLiteral("on");
+                    runAtom(&probe, manager.setMute(muted),
+                            QStringLiteral("manager.setMute(%1)").arg(muted ? QStringLiteral("on")
+                                                                            : QStringLiteral("off")),
+                            &anyFailed);
+                } else { qCritical() << "Invalid --manager-set-mute"; anyFailed = true; }
             }
-            if (parser.isSet(managerRefreshOption)) manager.refreshSignal();
+            if (parser.isSet(managerRefreshOption))
+                runAtom(&probe, manager.refreshSignal(), QStringLiteral("manager.refreshSignal()"),
+                        &anyFailed);
             for (const QString &t : parser.values(managerAddStationOption)) {
                 int f = 0; QString n;
                 if (parseFreqName(t, &f, &n)) {
@@ -894,8 +906,19 @@ int main(int argc, char *argv[])
             }
         }
         manager.shutdown();
-        qInfo().noquote() << QStringLiteral("[MGR] state saved -> %1, config saved -> %2")
-            .arg(stateFile).arg(configFile);
+        // 只有文件确实落盘才算保存成功，避免路径不可写时误报。
+        const bool stateSaved = QFile::exists(stateFile);
+        const bool configSaved = QFile::exists(configFile);
+        if (stateSaved && configSaved) {
+            qInfo().noquote() << QStringLiteral("[MGR] state saved -> %1, config saved -> %2")
+                .arg(stateFile).arg(configFile);
+        } else {
+            qCritical().noquote()
+                << QStringLiteral("[FAIL] state/config save: state=%1 config=%2")
+                    .arg(stateSaved ? QStringLiteral("ok") : QStringLiteral("missing"))
+                    .arg(configSaved ? QStringLiteral("ok") : QStringLiteral("missing"));
+            anyFailed = true;
+        }
     }
 
 
