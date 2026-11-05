@@ -8,7 +8,8 @@
 //   qCDebug    冗余调试信息
 //   qCWarning  错误 / 警告
 //   qCCritical 导致业务崩溃或业务功能失效
-// 默认日志级别为 Info（Debug 默认关闭）。需要查看调试信息时设置：
+// 默认日志级别为 Info（Debug 默认关闭），由各类别定义里的 QtInfoMsg 保证，
+// 不使用全局过滤规则。需要查看调试信息时设置：
 //   export QT_LOGGING_RULES="hsradio.*.debug=true"
 Q_DECLARE_LOGGING_CATEGORY(hsradioManager)
 Q_DECLARE_LOGGING_CATEGORY(hsradioHardwareMock)
