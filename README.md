@@ -75,57 +75,43 @@ make -j4
 ./hsradio_manager_test --help
 ```
 
-Mock setup:
-
-| Option | Meaning |
-|---|---|
-| `--mock-demo` | preset three demo stations (87500 / 98000 / 104800 kHz) |
-| `--mock-station kHz[:rssi:usn:wam:offset]` | preset one valid station, repeatable |
-| `--mock-failure <ErrorCode>` | make every tune fail, e.g. `AlsaWriteFailed` |
-
-Scheduler commands (executed in this order when given):
+Manager commands (every operation goes through `HSRadioManager`):
 
 | Option | Maps to |
 |---|---|
-| `--set-band FM / AM` | `submitSetBand` |
-| `--set-frequency kHz` (+`--search`) | `submitTune` with Preset / Search mode; repeatable, tunes in order and reads back state/signal for each frequency |
-| `--set-mute on / off` | `submitSetMute` |
-| (default) | `submitReadState` + `submitReadSignal`, skip with `--no-read` |
-| `--seek` | `submitSeek`, plus `cancelSeek` when `--seek-cancel-after` is set |
+| `--state-file path` | state JSON (default `/data/hsradio/radio_state.json`) |
+| `--config-file path` | config JSON (default `/data/hsradio/radio_config.json`) |
+| `--set-band FM / AM` | `manager.setBand` |
+| `--set-frequency kHz` | `manager.setFrequency`; repeatable, executed in order with state/signal read-back |
+| `--step-up` / `--step-down` | `manager.stepUp` / `manager.stepDown` |
+| `--set-mute on/off` | `manager.setMute` |
+| `--refresh` | `manager.refreshSignal` |
+| `--seek` | `manager.startSeek` (band range and thresholds come from the config) |
+| `--seek-down`, `--seek-mode full\|next`, `--seek-cancel-after ms` | seek options |
+| `--add-station kHz[:name]`, `--add-fav kHz[:name]` | add station / favorite, repeatable |
+| `--remove-station id`, `--remove-fav id` | remove by id |
+| `--list-stations`, `--list-favs` | list current band |
+| `--restore`, `--factory-reset` | `restoreLastState` / `factoryReset` |
+| `--print-state` | print region/band/frequency and station counts |
+| `--no-progress` | suppress per-step seek progress |
 
-Seek parameters: `--seek-band`, `--seek-from`, `--seek-to`,
-`--seek-step`, `--seek-mode full|next`, `--seek-down`, `--seek-no-mute`,
-`--seek-no-wrap`, `--seek-min-rssi`, `--seek-max-usn`, `--seek-max-wam`,
-`--seek-max-offset`, `--seek-lock-ms`, `--seek-sample-ms`, `--seek-samples`,
-`--seek-max-invalid`, `--seek-cancel-after <ms>`, `--no-progress`.
+The backend is selected at build time: an ALSA build uses the real SAF775X
+backend, a `hsradio_no_alsa` build falls back to `MockRadioHardware`. Tool output
+uses the `hsradio.managertest` logging category.
 
 Examples:
 
 ```sh
-# Preset listening: tune to 87.5 MHz and read the state back
-./hsradio_manager_test --mock-demo --set-band FM --set-frequency 87500
+# Tune three frequencies in order and print the state
+./hsradio_manager_test --set-frequency 94900 --set-frequency 96700 \
+  --set-frequency 101100 --print-state
 
-# Full-band scan over the demo stations (fast timing, no PLL delay)
-./hsradio_manager_test --mock-demo --seek --seek-lock-ms 0 --seek-sample-ms 0
-
-# "Next station" from 87.5 MHz: expected to stop at 98000 kHz
-./hsradio_manager_test --mock-demo --seek --seek-mode next --seek-from 87500 \
-  --seek-to 108000 --seek-step 100 --no-progress
-
-# Cancellation: stop the scan 200 ms after it starts
-./hsradio_manager_test --mock-demo --seek --seek-cancel-after 200 --no-progress
-
-# Error path: every tune fails
-./hsradio_manager_test --mock-failure AlsaWriteFailed --set-frequency 87500
+# Full-band seek through Manager, with elapsed time
+./hsradio_manager_test --seek --seek-mode full --no-progress
 ```
 
-The trailing `[MOCK] lastTuneMode=...` and `muteCallCount=...` lines show
-whether the seek used Search mode and whether the forced mute / restore happened
-(2 calls for one seek that started unmuted).
-
-> `HSRadioManager` is still a stub: it needs `HSRadioStationStore` /
-> `HSRadioBandConfig`, which arrive with the storage layer. Until then this tool
-> exercises `HSRadioOperationScheduler` and `MockRadioHardware`.
+> This tool only exercises `HSRadioManager`. Scheduler / hardware-level
+> interface debugging belongs to `HSRadioHardwareTest`.
 
 The same target is available through CMake:
 
