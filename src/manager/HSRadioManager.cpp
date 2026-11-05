@@ -43,22 +43,30 @@ Result HSRadioManager::initialize()
         return repoRes;
 
     m_currentBand = m_store->currentBand();
+    // 只把磁盘记忆值作为 UI 显示与后续操作的目标频率；开机不向硬件下发调谐，
+    // 是否恢复收听由 HMI 音源管理决定。硬件此时已由调度器强制静音。
     m_currentFrequencyKHz = m_store->lastFrequency(m_currentBand);
+    m_hardwareTuned = false;
 
     connectScheduler();
 
-    // 800ms 周期刷新信号质量（搜台期间暂停，避免干扰扫描读数）。
+    // 800ms 周期刷新信号质量（搜台期间暂停；尚未下发调谐时不读，
+    // 避免把驱动上电频点的信号当成记忆频点的信号广播）。
     m_refreshTimer = new QTimer(this);
     m_refreshTimer->setInterval(800);
     QObject::connect(m_refreshTimer, &QTimer::timeout, this, [this] {
-        if (!m_searching && m_scheduler)
+        if (m_hardwareTuned && !m_searching && m_scheduler)
             m_scheduler->submitReadSignal();
     });
     m_refreshTimer->start();
 
+    // 广播一次初始硬件状态（含开机强制静音），让 HMI 知道当前是静音的。
+    enqueueReadState();
+
     m_initialized = true;
     HSRADIO_LOG_INFO(hsradioManager).noquote() << "initialized; band=" << (m_currentBand == Band::AM ? "AM" : "FM")
-                                      << "freq=" << m_currentFrequencyKHz << "kHz";
+                                      << "remembered freq=" << m_currentFrequencyKHz << "kHz"
+                                      << "hardwareTuned=false";
     return Result::success();
 }
 
@@ -73,16 +81,39 @@ void HSRadioManager::connectScheduler()
     QObject::connect(m_scheduler, &HSRadioOperationScheduler::operationFinished,
                      this, [this](quint64 id, ErrorCode code) {
                          emit operationFinished(id, code);
+
+                         // 只有调谐类命令真正执行完成，缓存频率才算已下发到硬件；
+                         // 被 shutdown 丢弃的命令会收到 HardwareNotReady，不置位。
+                         if (m_pendingTuneIds.remove(id) && code == ErrorCode::None)
+                             m_hardwareTuned = true;
+
+                         // 聚合恢复序列中每条命令的错误码，最后一条完成才通知上层。
+                         if (m_restoreIds.remove(id) && code != ErrorCode::None
+                             && m_restoreCode == ErrorCode::None) {
+                             m_restoreCode = code;
+                         }
+                         if (m_restoreId && id == m_restoreId) {
+                             const RequestId done = m_restoreId;
+                             const ErrorCode finalCode = m_restoreCode;
+                             m_restoreId = 0;
+                             m_restoreCode = ErrorCode::None;
+                             m_restoreIds.clear();
+                             emit restoreFinished(done, finalCode, m_currentBand,
+                                                  m_currentFrequencyKHz);
+                         }
                      });
 
     QObject::connect(m_scheduler, &HSRadioOperationScheduler::stateRead,
                      this, [this](quint64, const HardwareState &state) {
-                         // 频率/频段以 Manager 的设置值为准（客户端读取的就是这个值），
-                         // 读回只用于同步静音状态，不再覆盖缓存或重复广播变更信号。
+                         // 读回只用于同步静音状态。已下发过调谐时以 Manager 设置值为准
+                         // （保留批3决策）；尚未下发时原样上报后端自报状态，
+                         // 不把记忆频率伪装成硬件当前频点。
                          m_muted = state.muted;
                          HardwareState current = state;
-                         current.band = m_currentBand;
-                         current.frequencyKHz = m_currentFrequencyKHz;
+                         if (m_hardwareTuned) {
+                             current.band = m_currentBand;
+                             current.frequencyKHz = m_currentFrequencyKHz;
+                         }
                          emit stateChanged(current);
                      });
 
@@ -153,22 +184,40 @@ void HSRadioManager::shutdown()
     }
 }
 
-Result HSRadioManager::restoreLastState()
+RequestId HSRadioManager::restoreLastState()
 {
-    HSRADIO_LOG_INFO(hsradioManager).noquote() << "restoreLastState";
-    if (!m_store || !m_scheduler)
-        return Result::failure(ErrorCode::HardwareNotReady,
-                               QStringLiteral("未初始化或调度器缺失"));
+    if (!m_scheduler || !m_store || !m_repository)
+        return 0;
+
     const Band band = m_store->currentBand();
-    const int freq = m_store->lastFrequency(band);
+    const auto bc = m_repository->bandConfig(band);
+    const int freq = qBound(bc.minKHz, m_store->lastFrequency(band), bc.maxKHz);
+
     m_currentBand = band;
     m_currentFrequencyKHz = freq;
+    m_store->setLastFrequency(band, freq);
+    m_store->save();
+    HSRADIO_LOG_INFO(hsradioManager).noquote()
+        << "restoreLastState; band=" << (band == Band::AM ? "AM" : "FM")
+        << "freq=" << freq << "kHz";
     emit bandChanged(band);
     emit frequencyChanged(freq);
-    m_scheduler->submitSetBand(band);
-    enqueueReadState();
-    setFrequency(freq);
-    return Result::success();
+
+    // 显式三步：SetBand → Tune → ReadState。读回放最后，
+    // 既作为「完成」标志，也避免读到调谐前的旧状态。
+    // 只下发频点，不解除静音；是否恢复播放由 HMI 音源管理决定。
+    const RequestId bandId = m_scheduler->submitSetBand(band);
+    const RequestId tuneId = m_scheduler->submitTune(freq, IRadioHardware::TuneMode::Preset);
+    const RequestId stateId = m_scheduler->submitReadState();
+    if (!bandId || !tuneId || !stateId)
+        return 0;
+
+    m_restoreIds.clear();
+    m_restoreIds << bandId << tuneId << stateId;
+    m_restoreCode = ErrorCode::None;
+    m_restoreId = stateId;
+    m_pendingTuneIds.insert(tuneId);
+    return stateId;
 }
 
 Result HSRadioManager::factoryReset()
@@ -183,6 +232,8 @@ Result HSRadioManager::factoryReset()
     m_repository->save();
     m_currentBand = m_store->currentBand();
     m_currentFrequencyKHz = m_store->lastFrequency(m_currentBand);
+    m_hardwareTuned = false;   // 恢复出厂只改数据，硬件仍在原频点
+    m_pendingTuneIds.clear();
     emit bandChanged(m_currentBand);
     emit frequencyChanged(m_currentFrequencyKHz);
     emit stationsChanged(Band::FM);
@@ -193,6 +244,7 @@ Result HSRadioManager::factoryReset()
 
 bool HSRadioManager::isInitialized() const { return m_initialized; }
 bool HSRadioManager::isSearching() const { return m_searching; }
+bool HSRadioManager::isHardwareTuned() const { return m_hardwareTuned; }
 Band HSRadioManager::currentBand() const { return m_currentBand; }
 int  HSRadioManager::currentFrequencyKHz() const { return m_currentFrequencyKHz; }
 SignalInfo HSRadioManager::lastSignalInfo() const { return m_lastSignalInfo; }
@@ -209,6 +261,7 @@ RequestId HSRadioManager::setBand(Band band)
     m_currentFrequencyKHz = m_store->lastFrequency(band);
     emit frequencyChanged(m_currentFrequencyKHz);
     const RequestId id = m_scheduler->submitSetBand(band);
+    // 只下发频段，后端 applyTune 用的是自身缓存频率，缓存频率仍未下发，不置位。
     enqueueReadState();
     return id;
 }
@@ -231,6 +284,8 @@ RequestId HSRadioManager::setFrequency(int frequencyKHz)
     m_currentFrequencyKHz = target;
     emit frequencyChanged(target);
     const RequestId id = m_scheduler->submitTune(target, IRadioHardware::TuneMode::Preset);
+    if (id)
+        m_pendingTuneIds.insert(id);   // 等 operationFinished 到达才置 hardwareTuned
     enqueueReadState();
     return id;
 }
@@ -271,6 +326,8 @@ RequestId HSRadioManager::startSeek(bool upward, SeekMode mode)
     const SeekRequest request =
         m_repository->makeSeekRequest(band, upward, mode, startKHz);
     m_lastSeekId = m_scheduler->submitSeek(request);
+    if (m_lastSeekId)
+        m_pendingTuneIds.insert(m_lastSeekId);   // 搜台会 setBand 并逐频点 tune
     return m_lastSeekId;
 }
 

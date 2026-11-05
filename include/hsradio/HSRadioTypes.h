@@ -114,8 +114,10 @@ Q_DECLARE_METATYPE(HSRadio::SeekRequest)
 // 运行期元类型注册：跨线程（调度器工作线程 -> 主线程）信号携带自定义
 // 类型时，Qt 队列连接要求目标类型已通过 qRegisterMetaType 注册，
 // 仅 Q_DECLARE_METATYPE 不足以支持排队连接。
-// 注意：moc 把信号形参以「无命名空间名」存入元数据（如 ErrorCode），
-// 队列连接按该名查找元类型，故每个类型须同时注册无命名空间别名。
+// 信号形参统一写全限定名（HSRadio::X），moc 元数据也记录全名，
+// 与 qRegisterMetaType<HSRadio::X>() 注册的名字一致。
+// 下面额外注册的无命名空间别名仅为兼容旧式 SIGNAL/SLOT 字符串连接
+// 与第三方按短名查找元类型的场景，按项目约定保留。
 inline void registerHSRadioMetaTypes()
 {
     qRegisterMetaType<HSRadio::Band>();

@@ -250,7 +250,7 @@ int main(int argc, char *argv[])
         QStringLiteral("列出当前频段收藏。"));
     const QCommandLineOption managerRestoreOption(
         QStringLiteral("restore"),
-        QStringLiteral("manager.restoreLastState()。"));
+        QStringLiteral("manager.restoreLastState()：等待 restoreFinished 后返回。"));
     const QCommandLineOption managerFactoryResetOption(
         QStringLiteral("factory-reset"),
         QStringLiteral("manager.factoryReset()：状态与配置回默认。"));
@@ -367,7 +367,9 @@ int main(int argc, char *argv[])
         QObject::connect(&manager, &HSRadioManager::signalInfoChanged, &app, [&](const SignalInfo &info){
             HSRADIO_LOG_INFO(hsradioManagerTest).noquote() << QStringLiteral("[MGR] signalInfoChanged: %1").arg(signalText(info));
         });
+        bool initialStateSeen = false;
         QObject::connect(&manager, &HSRadioManager::stateChanged, &app, [&](const HardwareState &s){
+            initialStateSeen = true;
             HSRADIO_LOG_INFO(hsradioManagerTest).noquote() << QStringLiteral("[MGR] stateChanged: band=%1 freq=%2 mute=%3")
                 .arg(bandName(s.band)).arg(s.frequencyKHz)
                 .arg(s.muted ? QStringLiteral("on") : QStringLiteral("off"));
@@ -401,6 +403,11 @@ int main(int argc, char *argv[])
         if (!reportResult(QStringLiteral("manager.initialize()"), initRes.code, initRes.message)) {
             anyFailed = true;
         } else {
+            // initialize() 会异步读回一次初始硬件状态（含开机强制静音），
+            // 短等其到达，避免工具立即退出导致开机状态不可观测。
+            if (!waitUntil([&]{ return initialStateSeen; }, 3000))
+                HSRADIO_LOG_WARNING(hsradioManagerTest).noquote()
+                    << QStringLiteral("[MGR] initial state read timed out");
             auto parseFreqName = [](const QString &text, int *freq, QString *name) -> bool {
                 const QStringList parts = text.split(QLatin1Char(':'));
                 bool ok = false;
@@ -409,8 +416,26 @@ int main(int argc, char *argv[])
                 *name = parts.size() > 1 ? parts.value(1) : QString();
                 return true;
             };
-            if (parser.isSet(managerRestoreOption))
-                reportResult(QStringLiteral("manager.restoreLastState()"), manager.restoreLastState().code, QString());
+            if (parser.isSet(managerRestoreOption)) {
+                bool restoreDone = false;
+                ErrorCode restoreCode = ErrorCode::HardwareOperationFailed;
+                QObject::connect(&manager, &HSRadioManager::restoreFinished, &app,
+                                 [&](quint64, ErrorCode code, Band, int) {
+                                     restoreDone = true;
+                                     restoreCode = code;
+                                 });
+                const RequestId id = manager.restoreLastState();
+                if (id == 0 || !waitUntil([&]{ return restoreDone; }, 15000)) {
+                    HSRADIO_LOG_CRITICAL(hsradioManagerTest).noquote()
+                        << QStringLiteral("[FAIL] manager.restoreLastState() | %1")
+                               .arg(id == 0 ? QStringLiteral("not ready")
+                                           : QStringLiteral("timed out waiting for restoreFinished"));
+                    anyFailed = true;
+                } else {
+                    reportResult(QStringLiteral("manager.restoreLastState()"),
+                                 restoreCode, QString());
+                }
+            }
             if (parser.isSet(managerFactoryResetOption))
                 reportResult(QStringLiteral("manager.factoryReset()"), manager.factoryReset().code, QString());
             if (parser.isSet(managerSetBandOption)) {
@@ -509,6 +534,10 @@ int main(int argc, char *argv[])
                     .arg(manager.stations(Band::AM).size())
                     .arg(manager.favorites(Band::FM).size())
                     .arg(manager.favorites(Band::AM).size());
+                HSRADIO_LOG_INFO(hsradioManagerTest).noquote()
+                    << QStringLiteral("[MGR] hardwareTuned=%1")
+                           .arg(manager.isHardwareTuned() ? QStringLiteral("true")
+                                                          : QStringLiteral("false"));
             }
             if (parser.isSet(managerSeekOption)) {
                 const bool up = !parser.isSet(managerSeekDownOption);

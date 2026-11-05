@@ -149,7 +149,13 @@ void HSRadioOperationScheduler::Worker::execute(const Command &command)
 
     switch (command.type) {
     case CommandType::Initialize: {
-        const Result result = m_hardware->initialize();
+        Result result = m_hardware->initialize();
+        if (result.ok()) {
+            // 开机强制静音：覆盖上电、首次调谐与切频段时 PLL 未锁定的杂音。
+            // 走 setMute() 让后端按配置极性写控件，不硬编码控件值。
+            // 静音失败合并进 initialized 错误码，避免上层误以为可以直接解除静音。
+            result = m_hardware->setMute(true);
+        }
         if (!result.ok())
             emit m_owner->errorOccurred(result.code, result.message);
         emit m_owner->initialized(result.code);
@@ -298,8 +304,9 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
     const int direction = request.upward ? 1 : -1;
     // 一个频段内的总频点数，用于保证全频段扫描恰好走完一圈。
     const int totalPoints = (request.maxKHz - request.minKHz) / step + 1;
+    const int startFrequency = qBound(request.minKHz, request.startKHz, request.maxKHz);
 
-    int frequency = qBound(request.minKHz, request.startKHz, request.maxKHz);
+    int frequency = startFrequency;
 
     // "找下一个台"要从当前频点的下一格开始，
     // 否则当前正在收听的台会被立刻再次命中，表现为"按了没反应"。
@@ -313,6 +320,7 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
 
     bool found = false;
     int stopFrequency = frequency;
+    int scannedPoints = 0;
     ErrorCode code = ErrorCode::None;
 
     for (int i = 0; i < totalPoints; ++i) {
@@ -330,6 +338,7 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
 
         // 只要调谐成功就更新停止点：取消时返回的正是"当时停在的频点"。
         stopFrequency = frequency;
+        ++scannedPoints;
 
         SignalInfo info;
         if (sampleStationValid(*m_hardware, request, &info)) {
@@ -352,6 +361,15 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
                 break;
             frequency = request.maxKHz;
         }
+    }
+
+    // FullBand 完整扫完一圈（含回绕）后，seekFinished 的停止位置对齐到搜索起始频率：
+    // 不额外多搜一个点，避免扫描终点（起点前一格）被写进 lastFrequency / UI 当前频率。
+    // 取消、调谐失败、NextStation、不回绕提前结束仍按「停止时扫描位置」上报。
+    if (request.mode == SeekMode::FullBand && request.wrapAround
+        && scannedPoints == totalPoints && code == ErrorCode::None
+        && !m_cancelSeek.load()) {
+        stopFrequency = startFrequency;
     }
 
     // 无论正常结束、被取消还是出错，都恢复进入搜台前的静音状态。

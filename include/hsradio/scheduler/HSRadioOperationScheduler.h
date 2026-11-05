@@ -32,16 +32,18 @@ public:
     RequestId submitSeek(const SeekRequest &request);
     void      cancelSeek();   // 置取消标志，最高优先、异步生效
 
+// 信号形参一律写全限定名：moc 按书写形式记录元类型名，
+// 写短名会让跨线程队列连接按 "ErrorCode" 等无命名空间名查找而静默失败。
 signals:
-    void initialized(ErrorCode code);
-    void operationFinished(quint64 id, ErrorCode code);
-    void stateRead(quint64 id, const HardwareState &state);
-    void signalRead(quint64 id, const SignalInfo &info);
+    void initialized(HSRadio::ErrorCode code);
+    void operationFinished(quint64 id, HSRadio::ErrorCode code);
+    void stateRead(quint64 id, const HSRadio::HardwareState &state);
+    void signalRead(quint64 id, const HSRadio::SignalInfo &info);
     void seekStarted(quint64 id);
     void seekProgress(quint64 id, int frequencyKHz);
-    void seekHit(quint64 id, int frequencyKHz, const SignalInfo &info);
+    void seekHit(quint64 id, int frequencyKHz, const HSRadio::SignalInfo &info);
     void seekFinished(quint64 id, int frequencyKHz, bool found);
-    void errorOccurred(ErrorCode code, const QString &message);
+    void errorOccurred(HSRadio::ErrorCode code, const QString &message);
 
 private:
     class Worker;             // 内部工作对象（定义在 .cpp）

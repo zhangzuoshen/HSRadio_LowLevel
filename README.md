@@ -91,13 +91,25 @@ Manager commands (every operation goes through `HSRadioManager`):
 | `--add-station kHz[:name]`, `--add-fav kHz[:name]` | add station / favorite, repeatable |
 | `--remove-station id`, `--remove-fav id` | remove by id |
 | `--list-stations`, `--list-favs` | list current band |
-| `--restore`, `--factory-reset` | `restoreLastState` / `factoryReset` |
+| `--restore`, `--factory-reset` | `restoreLastState` (async, waits for `restoreFinished`) / `factoryReset` |
 | `--print-state` | print region/band/frequency and station counts |
 | `--no-progress` | suppress per-step seek progress |
+
+After a complete wrapped `FullBand` seek, `seekFinished` reports the scan's start
+frequency (no extra scan point is added), so the scan end point does not become
+the remembered `lastFrequency`. Cancelled or failed scans still report the
+frequency reached when stopping.
 
 The backend is selected at build time: an ALSA build uses the real SAF775X
 backend, a `hsradio_no_alsa` build falls back to `MockRadioHardware`. Tool output
 uses the `hsradio.managertest` logging category.
+
+On startup the scheduler forces `mute=on` before any tune, and
+`HSRadioManager::initialize()` only loads the remembered band/frequency into the
+manager cache, without sending them to the hardware. Use `isHardwareTuned()` to
+tell whether the cached value has actually been sent. Resuming playback
+(including unmute) belongs to the HMI audio source manager, not to
+`HSRadioManager`.
 
 Examples:
 
