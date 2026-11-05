@@ -90,6 +90,9 @@ signals:
 private:
     void connectScheduler();
     void enqueueReadState();
+    // 把磁盘记忆频率对齐到当前配置的频段：越界时回退到该频段 defaultKHz。
+    // 只读判断，不写 store；是否落盘由调用方决定。
+    int normalizedFrequency(Band band, int storedKHz) const;
 
     HSRadioOperationScheduler *m_scheduler = nullptr;
     HSRadioStationStore      *m_store = nullptr;

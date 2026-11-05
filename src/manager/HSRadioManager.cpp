@@ -29,6 +29,23 @@ HSRadioManager::~HSRadioManager()
         m_refreshTimer->stop();
 }
 
+int HSRadioManager::normalizedFrequency(Band band, int storedKHz) const
+{
+    if (!m_repository)
+        return storedKHz;
+    const auto bc = m_repository->bandConfig(band);
+    if (bc.minKHz > bc.maxKHz)   // 配置异常：不动用户状态，避免把坏配置固化进 state
+        return storedKHz;
+    if (storedKHz >= bc.minKHz && storedKHz <= bc.maxKHz)
+        return storedKHz;
+
+    const int fallback = qBound(bc.minKHz, bc.defaultKHz, bc.maxKHz);
+    HSRADIO_LOG_WARNING(hsradioManager).noquote()
+        << QStringLiteral("remembered frequency %1 kHz out of [%2,%3], fallback to default %4 kHz")
+               .arg(storedKHz).arg(bc.minKHz).arg(bc.maxKHz).arg(fallback);
+    return fallback;
+}
+
 Result HSRadioManager::initialize()
 {
     if (!m_store || !m_repository)
@@ -45,7 +62,9 @@ Result HSRadioManager::initialize()
     m_currentBand = m_store->currentBand();
     // 只把磁盘记忆值作为 UI 显示与后续操作的目标频率；开机不向硬件下发调谐，
     // 是否恢复收听由 HMI 音源管理决定。硬件此时已由调度器强制静音。
-    m_currentFrequencyKHz = m_store->lastFrequency(m_currentBand);
+    // 越界记忆值回退到该频段 defaultKHz（仅改内存，不为此写盘）。
+    m_currentFrequencyKHz = normalizedFrequency(m_currentBand,
+                                                m_store->lastFrequency(m_currentBand));
     m_hardwareTuned = false;
 
     connectScheduler();
@@ -190,13 +209,24 @@ RequestId HSRadioManager::restoreLastState()
         return 0;
 
     const Band band = m_store->currentBand();
-    const auto bc = m_repository->bandConfig(band);
-    const int freq = qBound(bc.minKHz, m_store->lastFrequency(band), bc.maxKHz);
+    const int stored = m_store->lastFrequency(band);
+    const int freq = normalizedFrequency(band, stored);
 
     m_currentBand = band;
     m_currentFrequencyKHz = freq;
-    m_store->setLastFrequency(band, freq);
-    m_store->save();
+
+    // 只在越界修正时才写回：正常开机恢复不产生落盘与 .bak 覆盖。
+    // 保存失败记入恢复序列的错误码，让 restoreFinished 对上层可见。
+    ErrorCode initialCode = ErrorCode::None;
+    if (freq != stored) {
+        m_store->setLastFrequency(band, freq);
+        const Result saved = m_store->save();
+        if (!saved.ok()) {
+            initialCode = saved.code;
+            HSRADIO_LOG_WARNING(hsradioManager).noquote()
+                << "state save failed after frequency fallback:" << saved.message;
+        }
+    }
     HSRADIO_LOG_INFO(hsradioManager).noquote()
         << "restoreLastState; band=" << (band == Band::AM ? "AM" : "FM")
         << "freq=" << freq << "kHz";
@@ -214,7 +244,7 @@ RequestId HSRadioManager::restoreLastState()
 
     m_restoreIds.clear();
     m_restoreIds << bandId << tuneId << stateId;
-    m_restoreCode = ErrorCode::None;
+    m_restoreCode = initialCode;
     m_restoreId = stateId;
     m_pendingTuneIds.insert(tuneId);
     return stateId;
@@ -228,10 +258,14 @@ Result HSRadioManager::factoryReset()
                                QStringLiteral("存储层未注入"));
     m_store->resetToDefault();
     m_repository->resetToDefault();
+    m_currentBand = m_store->currentBand();
+    const int stored = m_store->lastFrequency(m_currentBand);
+    const int freq = normalizedFrequency(m_currentBand, stored);
+    if (freq != stored)
+        m_store->setLastFrequency(m_currentBand, freq);
     m_store->save();
     m_repository->save();
-    m_currentBand = m_store->currentBand();
-    m_currentFrequencyKHz = m_store->lastFrequency(m_currentBand);
+    m_currentFrequencyKHz = freq;
     m_hardwareTuned = false;   // 恢复出厂只改数据，硬件仍在原频点
     m_pendingTuneIds.clear();
     emit bandChanged(m_currentBand);
@@ -255,11 +289,15 @@ RequestId HSRadioManager::setBand(Band band)
         return 0;
     HSRADIO_LOG_INFO(hsradioManager).noquote() << "setBand" << (band == Band::AM ? "AM" : "FM");
     m_store->setCurrentBand(band);
+    const int stored = m_store->lastFrequency(band);
+    const int freq = normalizedFrequency(band, stored);
+    if (freq != stored)
+        m_store->setLastFrequency(band, freq);
     m_store->save();
     m_currentBand = band;
     emit bandChanged(band);
-    m_currentFrequencyKHz = m_store->lastFrequency(band);
-    emit frequencyChanged(m_currentFrequencyKHz);
+    m_currentFrequencyKHz = freq;
+    emit frequencyChanged(freq);
     const RequestId id = m_scheduler->submitSetBand(band);
     // 只下发频段，后端 applyTune 用的是自身缓存频率，缓存频率仍未下发，不置位。
     enqueueReadState();

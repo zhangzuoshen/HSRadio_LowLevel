@@ -111,6 +111,12 @@ tell whether the cached value has actually been sent. Resuming playback
 (including unmute) belongs to the HMI audio source manager, not to
 `HSRadioManager`.
 
+If a remembered `lastFrequency` falls outside the band range in the active
+config, the manager falls back to that band's `defaultKHz`. The correction is
+persisted only when it actually changes the value, so a normal startup performs
+no state write. An explicit `setFrequency()` outside the range is still clamped
+to the band limit.
+
 Examples:
 
 ```sh
