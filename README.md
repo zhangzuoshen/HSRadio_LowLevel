@@ -108,7 +108,9 @@ frequency is remembered. Only `FullBand` rebuilds the band's station list;
 State and config persistence uses `QSaveFile` (atomic full-file replace with
 `fsync`), copies the previous version to `.bak` before committing, and recovers
 from `.bak` when the main file is missing or corrupt. Writes are debounced by
-300ms and always flushed on shutdown.
+300ms and always flushed on shutdown. Factory reset uses a purge policy: it
+writes the defaults without creating a backup and removes existing `.bak`
+files, so cleared user data cannot be automatically restored later.
 
 The backend is selected at build time: an ALSA build uses the real SAF775X
 backend, a `hsradio_no_alsa` build falls back to `MockRadioHardware`. Tool output

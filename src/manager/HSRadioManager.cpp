@@ -95,11 +95,13 @@ Result HSRadioManager::initialize()
     return Result::success();
 }
 
-void HSRadioManager::scheduleSave(bool includeConfig)
+void HSRadioManager::scheduleSave(bool includeConfig, bool purgeBackup)
 {
     m_stateDirty = true;
     if (includeConfig)
         m_configDirty = true;
+    if (purgeBackup)
+        m_purgeBackupOnSave = true;   // 恢复出厂：本次落盘要清除 .bak
     if (m_saveTimer)
         m_saveTimer->start(300);   // 重复调用重置计时器，合并 300ms 内的写
     else
@@ -110,10 +112,14 @@ ErrorCode HSRadioManager::flushSave()
 {
     if (m_saveTimer)
         m_saveTimer->stop();
+    const JsonBackupPolicy policy = m_purgeBackupOnSave
+                                        ? JsonBackupPolicy::Purge
+                                        : JsonBackupPolicy::Create;
+    m_purgeBackupOnSave = false;
     ErrorCode code = ErrorCode::None;
     if (m_stateDirty && m_store) {
         m_stateDirty = false;
-        const Result r = m_store->save();
+        const Result r = m_store->save(policy);
         if (!r.ok()) {
             code = r.code;
             HSRADIO_LOG_WARNING(hsradioManager).noquote()
@@ -122,7 +128,7 @@ ErrorCode HSRadioManager::flushSave()
     }
     if (m_configDirty && m_repository) {
         m_configDirty = false;
-        const Result r = m_repository->save();
+        const Result r = m_repository->save(policy);
         if (!r.ok()) {
             if (code == ErrorCode::None)
                 code = r.code;
@@ -296,7 +302,7 @@ Result HSRadioManager::factoryReset()
     const int freq = normalizedFrequency(m_currentBand, stored);
     if (freq != stored)
         m_store->setLastFrequency(m_currentBand, freq);
-    scheduleSave(true);   // state + config 一起落盘
+    scheduleSave(true, true);   // state + config 一起落盘，并清除旧 .bak
     m_currentFrequencyKHz = freq;
     m_hardwareTuned = false;   // 恢复出厂只改数据，硬件仍在原频点
     m_pendingTuneIds.clear();

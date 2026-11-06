@@ -29,16 +29,16 @@ void syncParentDirectory(const QString &path)
     ::close(fd);
 }
 
-// 原子整文件替换：先在 commit 之前把上一版复制成 .bak（主文件全程不挪走），
-// 再用 QSaveFile 写临时文件、flush + fsync、原子 rename 覆盖目标，
+// 原子整文件替换：QSaveFile 写临时文件、flush + fsync、原子 rename 覆盖目标，
 // 最后刷目标文件与目录项。失败时临时文件回滚，原文件完好。
+// policy 决定 .bak：Create 生成、KeepExisting 保留、Purge 成功后清除。
 Result writeJsonFile(const QString &path, const QJsonDocument &doc,
-                     bool backupExisting = true)
+                     JsonBackupPolicy policy = JsonBackupPolicy::Create)
 {
     const QByteArray data = doc.toJson(QJsonDocument::Indented);
     const QString bakPath = path + QStringLiteral(".bak");
 
-    if (backupExisting && QFile::exists(path)) {
+    if (policy == JsonBackupPolicy::Create && QFile::exists(path)) {
         const QString tmpBak = bakPath + QStringLiteral(".tmp");
         QFile::remove(tmpBak);
         if (QFile::copy(path, tmpBak)) {
@@ -76,6 +76,8 @@ Result writeJsonFile(const QString &path, const QJsonDocument &doc,
         target.close();
     }
     syncParentDirectory(path);
+    if (policy == JsonBackupPolicy::Purge)
+        QFile::remove(bakPath);   // commit 成功后才清除；写入失败仍保留旧备份
     return Result::success();
 }
 
@@ -106,7 +108,7 @@ Result readJsonFile(const QString &path, QJsonDocument *doc, bool *hasData)
         HSRADIO_LOG_WARNING(hsradioStorageRepository).noquote()
             << "主文件缺失或损坏，已从 .bak 恢复并重建主文件:" << path;
         // 重建主文件，但跳过备份步骤，避免覆盖刚救回数据的 .bak。
-        const Result rebuilt = writeJsonFile(path, *doc, false);
+        const Result rebuilt = writeJsonFile(path, *doc, JsonBackupPolicy::KeepExisting);
         if (!rebuilt.ok())
             HSRADIO_LOG_WARNING(hsradioStorageRepository).noquote()
                 << "主文件重建失败:" << rebuilt.message;
@@ -161,16 +163,16 @@ Result HSRadioRepository::load()
         return r;
     }
     if (!hasData) {
+        // 首次启动 / 文件被删：从默认模板或内置默认初始化后立即落盘。
+        // 防抖下 shutdown() 只在 dirty 时写，若这里不创建，config 永远不会重建。
         if (QFile::exists(m_defaultConfigFilePath)) {
             QJsonDocument d;
             bool defaultHasData = false;
             const Result dr = readJsonFile(m_defaultConfigFilePath, &d, &defaultHasData);
-            if (dr.ok() && defaultHasData && d.isObject()) {
+            if (dr.ok() && defaultHasData && d.isObject())
                 parseFromJson(d.object());
-                return Result::success();
-            }
         }
-        return Result::success();   // 保留内置默认
+        return save();
     }
     if (doc.isObject())
         parseFromJson(doc.object());
@@ -178,7 +180,7 @@ Result HSRadioRepository::load()
     return Result::success();
 }
 
-Result HSRadioRepository::save()
+Result HSRadioRepository::save(JsonBackupPolicy policy)
 {
     QJsonObject root;
     root.insert(QStringLiteral("version"), 1);
@@ -203,7 +205,7 @@ Result HSRadioRepository::save()
     seek.insert(QStringLiteral("wrapAround"), m_seekWrapAround);
     root.insert(QStringLiteral("seek"), seek);
 
-    const Result r = writeJsonFile(m_configFilePath, QJsonDocument(root));
+    const Result r = writeJsonFile(m_configFilePath, QJsonDocument(root), policy);
     if (!r.ok())
         HSRADIO_LOG_CRITICAL(hsradioStorageRepository).noquote() << "config save failed:" << r.message;
     return r;

@@ -95,7 +95,7 @@ private:
     int normalizedFrequency(Band band, int storedKHz) const;
     // 300ms 防抖落盘：写操作只标记 dirty，真正的 save 收敛到 flushSave()
     // 统一检查返回值；shutdown() 强制 flush。返回首个落盘错误码。
-    void scheduleSave(bool includeConfig = false);
+    void scheduleSave(bool includeConfig = false, bool purgeBackup = false);
     ErrorCode flushSave();
 
     HSRadioOperationScheduler *m_scheduler = nullptr;
@@ -118,6 +118,7 @@ private:
     QTimer   *m_saveTimer = nullptr;
     bool      m_stateDirty = false;
     bool      m_configDirty = false;
+    bool      m_purgeBackupOnSave = false;   // 恢复出厂：下次 flush 清除 .bak
 
     // 已提交、尚未执行完成的调谐类命令；只有其 operationFinished 到达才置 hardwareTuned。
     QSet<RequestId> m_pendingTuneIds;

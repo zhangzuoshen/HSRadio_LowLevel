@@ -23,7 +23,8 @@ public:
                               const QString &defaultConfigFilePath = QString());
 
     Result load();
-    Result save();
+    // 写回磁盘；policy 决定 .bak 的生成/保留/清除（默认生成）。
+    Result save(JsonBackupPolicy policy = JsonBackupPolicy::Create);
     Result resetToDefault();      // 用 default 模板（或内置默认）覆盖并落盘
 
     QString region() const;

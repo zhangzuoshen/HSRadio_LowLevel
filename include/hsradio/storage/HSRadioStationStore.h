@@ -16,8 +16,8 @@ public:
     // 从磁盘加载；文件不存在时用内置默认（返回 success）。
     // JSON 解析失败才返回 failure（此时内存保持内置默认）。
     Result load();
-    // 写回磁盘，写前把旧文件备份为 <file>.bak。
-    Result save();
+    // 写回磁盘；policy 决定 .bak 的生成/保留/清除（默认生成）。
+    Result save(JsonBackupPolicy policy = JsonBackupPolicy::Create);
     // 恢复出厂：当前频段回 FM、频率回默认、清空电台与收藏。
     Result resetToDefault();
 

@@ -5,6 +5,13 @@
 
 namespace HSRadio {
 
+// JSON 状态文件写入时的备份策略。
+enum class JsonBackupPolicy : quint8 {
+    Create = 0,   // 普通写入：commit 前把上一版主文件复制为 .bak
+    KeepExisting, // 跳过备份生成、保留已有 .bak（从 .bak 恢复后重建主文件）
+    Purge         // 跳过备份生成、commit 成功后删除 .bak（恢复出厂）
+};
+
 enum class Band : quint8 {
     FM = 0,
     AM = 1
