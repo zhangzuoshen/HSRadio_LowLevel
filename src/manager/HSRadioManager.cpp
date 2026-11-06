@@ -79,9 +79,9 @@ Result HSRadioManager::initialize()
     });
     m_refreshTimer->start();
 
-    // 广播一次初始硬件状态（含开机强制静音），让 HMI 知道当前是静音的。
-    enqueueReadState();
-
+    // 开机不主动广播硬件状态：驱动 read-back 不返回频率，后端自报的 87000
+    // 只是缓存默认值，广播出去会与记忆频点冲突。开机强制静音是既定约定，
+    // 第一次真实操作（setBand / setFrequency / setMute / restore）会读回并广播。
     m_initialized = true;
     HSRADIO_LOG_INFO(hsradioManager).noquote() << "initialized; band=" << (m_currentBand == Band::AM ? "AM" : "FM")
                                       << "remembered freq=" << m_currentFrequencyKHz << "kHz"
@@ -157,6 +157,9 @@ void HSRadioManager::connectScheduler()
     QObject::connect(m_scheduler, &HSRadioOperationScheduler::seekHit,
                      this, [this](quint64, int frequencyKHz, const SignalInfo &info) {
                          Q_UNUSED(info);
+                         // 只有 FullBand 重建列表；NextStation 是临时跳台，不入库。
+                         if (m_currentSeekMode == SeekMode::NextStation)
+                             return;
                          Station s;
                          s.band = m_currentBand;
                          s.frequencyKHz = frequencyKHz;
@@ -171,6 +174,8 @@ void HSRadioManager::connectScheduler()
     QObject::connect(m_scheduler, &HSRadioOperationScheduler::seekFinished,
                      this, [this](quint64 id, int frequencyKHz, bool found) {
                          m_searching = false;
+                         // 两种模式都记住当前收听频点（UI 缓存 + lastFrequency 落盘）；
+                         // 只有 FullBand 重建电台列表，NextStation 不动列表。
                          m_currentFrequencyKHz = frequencyKHz;
                          m_store->setLastFrequency(m_currentBand, frequencyKHz);
                          m_store->save();
@@ -358,6 +363,7 @@ RequestId HSRadioManager::startSeek(bool upward, SeekMode mode)
                                      << "upward=" << upward;
     const Band band = m_currentBand;
     const int startKHz = m_currentFrequencyKHz;
+    m_currentSeekMode = mode;
     if (mode == SeekMode::FullBand)
         m_store->clearStations(band);   // 全频段扫描：先清空再边扫边写
     m_currentSeekUpward = upward;

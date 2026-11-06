@@ -367,9 +367,7 @@ int main(int argc, char *argv[])
         QObject::connect(&manager, &HSRadioManager::signalInfoChanged, &app, [&](const SignalInfo &info){
             HSRADIO_LOG_INFO(hsradioManagerTest).noquote() << QStringLiteral("[MGR] signalInfoChanged: %1").arg(signalText(info));
         });
-        bool initialStateSeen = false;
         QObject::connect(&manager, &HSRadioManager::stateChanged, &app, [&](const HardwareState &s){
-            initialStateSeen = true;
             HSRADIO_LOG_INFO(hsradioManagerTest).noquote() << QStringLiteral("[MGR] stateChanged: band=%1 freq=%2 mute=%3")
                 .arg(bandName(s.band)).arg(s.frequencyKHz)
                 .arg(s.muted ? QStringLiteral("on") : QStringLiteral("off"));
@@ -403,11 +401,6 @@ int main(int argc, char *argv[])
         if (!reportResult(QStringLiteral("manager.initialize()"), initRes.code, initRes.message)) {
             anyFailed = true;
         } else {
-            // initialize() 会异步读回一次初始硬件状态（含开机强制静音），
-            // 短等其到达，避免工具立即退出导致开机状态不可观测。
-            if (!waitUntil([&]{ return initialStateSeen; }, 3000))
-                HSRADIO_LOG_WARNING(hsradioManagerTest).noquote()
-                    << QStringLiteral("[MGR] initial state read timed out");
             auto parseFreqName = [](const QString &text, int *freq, QString *name) -> bool {
                 const QStringList parts = text.split(QLatin1Char(':'));
                 bool ok = false;

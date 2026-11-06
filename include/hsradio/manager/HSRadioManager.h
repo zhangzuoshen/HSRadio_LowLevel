@@ -107,6 +107,7 @@ private:
     bool      m_muted = false;
     SignalInfo m_lastSignalInfo;
     bool      m_currentSeekUpward = true;
+    SeekMode  m_currentSeekMode = SeekMode::FullBand;
     quint64   m_lastSeekId = 0;
     QTimer   *m_refreshTimer = nullptr;
 

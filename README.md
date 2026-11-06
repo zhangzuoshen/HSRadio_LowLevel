@@ -100,6 +100,11 @@ frequency (no extra scan point is added), so the scan end point does not become
 the remembered `lastFrequency`. Cancelled or failed scans still report the
 frequency reached when stopping.
 
+Both modes update `lastFrequency` and save state, so the current listening
+frequency is remembered. Only `FullBand` rebuilds the band's station list;
+`NextStation` is a transient jump that does not add stations or emit
+`stationsChanged`.
+
 The backend is selected at build time: an ALSA build uses the real SAF775X
 backend, a `hsradio_no_alsa` build falls back to `MockRadioHardware`. Tool output
 uses the `hsradio.managertest` logging category.
