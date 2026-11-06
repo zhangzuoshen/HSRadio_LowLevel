@@ -194,15 +194,25 @@ Result HSRadioRepository::save(JsonBackupPolicy policy)
     QJsonObject seek;
     seek.insert(QStringLiteral("direction"),
                 m_seekUpward ? QStringLiteral("up") : QStringLiteral("down"));
-    seek.insert(QStringLiteral("minRssi"), m_threshold.minRssi);
-    seek.insert(QStringLiteral("maxUsn"), m_threshold.maxUsn);
-    seek.insert(QStringLiteral("maxWam"), m_threshold.maxWam);
-    seek.insert(QStringLiteral("maxOffset"), m_threshold.maxOffset);
     seek.insert(QStringLiteral("lockMs"), m_seekLockMs);
     seek.insert(QStringLiteral("sampleMs"), m_seekSampleMs);
     seek.insert(QStringLiteral("sampleCount"), m_seekSampleCount);
     seek.insert(QStringLiteral("maxInvalidRetries"), m_seekMaxInvalid);
     seek.insert(QStringLiteral("wrapAround"), m_seekWrapAround);
+
+    QJsonObject fm;
+    fm.insert(QStringLiteral("minRssi"), m_fmThreshold.minRssi);
+    fm.insert(QStringLiteral("maxUsn"), m_fmThreshold.maxUsn);
+    fm.insert(QStringLiteral("maxWam"), m_fmThreshold.maxWam);
+    fm.insert(QStringLiteral("maxOffset"), m_fmThreshold.maxOffset);
+    seek.insert(QStringLiteral("FM"), fm);
+
+    QJsonObject am;
+    am.insert(QStringLiteral("minRssi"), m_amThreshold.minRssi);
+    am.insert(QStringLiteral("maxOffset"), m_amThreshold.maxOffset);
+    am.insert(QStringLiteral("maxModulation"), m_amThreshold.maxModulation);
+    seek.insert(QStringLiteral("AM"), am);
+
     root.insert(QStringLiteral("seek"), seek);
 
     const Result r = writeJsonFile(m_configFilePath, QJsonDocument(root), policy);
@@ -232,7 +242,8 @@ void HSRadioRepository::setBuiltInDefaults()
     m_region = QStringLiteral("CN");
     m_bandFM = BandConfig{87500, 108000, 100, 87500};
     m_bandAM = BandConfig{531, 1602, 9, 531};
-    m_threshold = SeekThreshold{};   // 21/25/25/40
+    m_fmThreshold = FmSeekThreshold{};   // 21/25/25/40
+    m_amThreshold = AmSeekThreshold{};   // 30/50/255
     m_seekUpward = true;
     m_seekWrapAround = true;
     m_seekLockMs = 8;
@@ -253,10 +264,16 @@ void HSRadioRepository::parseFromJson(const QJsonObject &root)
     const QString dir = seek.value(QStringLiteral("direction")).toString();
     m_seekUpward = dir.compare(QStringLiteral("down"), Qt::CaseInsensitive) != 0;
 
-    m_threshold.minRssi = seek.value(QStringLiteral("minRssi")).toInt(m_threshold.minRssi);
-    m_threshold.maxUsn = seek.value(QStringLiteral("maxUsn")).toInt(m_threshold.maxUsn);
-    m_threshold.maxWam = seek.value(QStringLiteral("maxWam")).toInt(m_threshold.maxWam);
-    m_threshold.maxOffset = seek.value(QStringLiteral("maxOffset")).toInt(m_threshold.maxOffset);
+    const QJsonObject fm = seek.value(QStringLiteral("FM")).toObject();
+    m_fmThreshold.minRssi = fm.value(QStringLiteral("minRssi")).toInt(m_fmThreshold.minRssi);
+    m_fmThreshold.maxUsn = fm.value(QStringLiteral("maxUsn")).toInt(m_fmThreshold.maxUsn);
+    m_fmThreshold.maxWam = fm.value(QStringLiteral("maxWam")).toInt(m_fmThreshold.maxWam);
+    m_fmThreshold.maxOffset = fm.value(QStringLiteral("maxOffset")).toInt(m_fmThreshold.maxOffset);
+
+    const QJsonObject am = seek.value(QStringLiteral("AM")).toObject();
+    m_amThreshold.minRssi = am.value(QStringLiteral("minRssi")).toInt(m_amThreshold.minRssi);
+    m_amThreshold.maxOffset = am.value(QStringLiteral("maxOffset")).toInt(m_amThreshold.maxOffset);
+    m_amThreshold.maxModulation = am.value(QStringLiteral("maxModulation")).toInt(m_amThreshold.maxModulation);
 
     m_seekWrapAround = seek.value(QStringLiteral("wrapAround")).toBool(m_seekWrapAround);
     m_seekLockMs = seek.value(QStringLiteral("lockMs")).toInt(m_seekLockMs);
@@ -281,8 +298,11 @@ void HSRadioRepository::setBandConfig(Band band, const BandConfig &cfg)
         m_bandFM = cfg;
 }
 
-SeekThreshold HSRadioRepository::seekThreshold() const { return m_threshold; }
-void HSRadioRepository::setSeekThreshold(const SeekThreshold &th) { m_threshold = th; }
+FmSeekThreshold HSRadioRepository::fmSeekThreshold() const { return m_fmThreshold; }
+void HSRadioRepository::setFmSeekThreshold(const FmSeekThreshold &th) { m_fmThreshold = th; }
+
+AmSeekThreshold HSRadioRepository::amSeekThreshold() const { return m_amThreshold; }
+void HSRadioRepository::setAmSeekThreshold(const AmSeekThreshold &th) { m_amThreshold = th; }
 
 bool HSRadioRepository::seekUpward() const { return m_seekUpward; }
 void HSRadioRepository::setSeekUpward(bool upward) { m_seekUpward = upward; }
@@ -314,7 +334,8 @@ SeekRequest HSRadioRepository::makeSeekRequest(Band band, bool upward, SeekMode 
     req.minKHz = bc.minKHz;
     req.maxKHz = bc.maxKHz;
     req.stepKHz = bc.stepKHz;
-    req.threshold = m_threshold;
+    req.fmThreshold = m_fmThreshold;
+    req.amThreshold = m_amThreshold;
     req.lockMs = m_seekLockMs;
     req.sampleMs = m_seekSampleMs;
     req.sampleCount = m_seekSampleCount;

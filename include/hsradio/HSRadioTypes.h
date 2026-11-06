@@ -47,12 +47,14 @@ struct SignalInfo {
     int usn = 0;
     int wam = 0;
     int offset = 0;
+    int modulation = 0;     // 解调质量（真机/SAF775X 驱动填充）
     bool stereo = false;
 
     bool hasRssi = false;
     bool hasUsn = false;
     bool hasWam = false;
     bool hasOffset = false;
+    bool hasModulation = false;
     bool hasStereo = false;
 };
 
@@ -80,12 +82,21 @@ struct Station {
     QString source;              // 来源："seek" | "manual"
 };
 
-// 搜台信号质量阈值。
-struct SeekThreshold {
+// 搜台信号质量阈值：FM / AM 分两组，判定口径不同。
+//   FM：rssi >= minRssi 且 usn <= maxUsn 且 wam <= maxWam 且 offset <= maxOffset
+//   AM：rssi >= minRssi 且 offset <= maxOffset 且 modulation <= maxModulation
+// 注：AM 的 usn/wam 不参与判定（与参考驱动一致）。
+struct FmSeekThreshold {
     int minRssi = 21;
     int maxUsn = 25;
     int maxWam = 25;
     int maxOffset = 40;
+};
+
+struct AmSeekThreshold {
+    int minRssi = 30;
+    int maxOffset = 50;
+    int maxModulation = 255;   // 占位上限（解调质量 0..255），待真机数据校准
 };
 
 // 一次搜台请求的完整参数（由 Manager 依配置构造，交给调度器执行）。
@@ -97,13 +108,16 @@ struct SeekRequest {
     int           minKHz = 0;
     int           maxKHz = 0;
     int           stepKHz = 0;
-    SeekThreshold threshold;
     int           lockMs = 8;            // PLL 锁定时间
     int           sampleMs = 2;          // 单次抽样间隔
     int           sampleCount = 4;       // 抽样次数
     int           maxInvalid = 3;        // 连续无效则放弃
     bool          wrapAround = true;     // 到边界是否回绕
     bool          muteDuringSeek = true; // 搜台期间强制静音，结束恢复
+
+    // 频段专属阈值：判定时按 band 选用对应一组。
+    FmSeekThreshold fmThreshold;
+    AmSeekThreshold amThreshold;
 };
 
 } // namespace HSRadio
@@ -115,7 +129,8 @@ Q_DECLARE_METATYPE(HSRadio::SignalInfo)
 Q_DECLARE_METATYPE(HSRadio::HardwareState)
 Q_DECLARE_METATYPE(HSRadio::Station)
 Q_DECLARE_METATYPE(HSRadio::SeekMode)
-Q_DECLARE_METATYPE(HSRadio::SeekThreshold)
+Q_DECLARE_METATYPE(HSRadio::FmSeekThreshold)
+Q_DECLARE_METATYPE(HSRadio::AmSeekThreshold)
 Q_DECLARE_METATYPE(HSRadio::SeekRequest)
 
 // 运行期元类型注册：跨线程（调度器工作线程 -> 主线程）信号携带自定义
@@ -134,7 +149,8 @@ inline void registerHSRadioMetaTypes()
     qRegisterMetaType<HSRadio::HardwareState>();
     qRegisterMetaType<HSRadio::Station>();
     qRegisterMetaType<HSRadio::SeekMode>();
-    qRegisterMetaType<HSRadio::SeekThreshold>();
+    qRegisterMetaType<HSRadio::FmSeekThreshold>();
+    qRegisterMetaType<HSRadio::AmSeekThreshold>();
     qRegisterMetaType<HSRadio::SeekRequest>();
     qRegisterMetaType<HSRadio::Band>("Band");
     qRegisterMetaType<HSRadio::ErrorCode>("ErrorCode");
@@ -143,6 +159,7 @@ inline void registerHSRadioMetaTypes()
     qRegisterMetaType<HSRadio::HardwareState>("HardwareState");
     qRegisterMetaType<HSRadio::Station>("Station");
     qRegisterMetaType<HSRadio::SeekMode>("SeekMode");
-    qRegisterMetaType<HSRadio::SeekThreshold>("SeekThreshold");
+    qRegisterMetaType<HSRadio::FmSeekThreshold>("FmSeekThreshold");
+    qRegisterMetaType<HSRadio::AmSeekThreshold>("AmSeekThreshold");
     qRegisterMetaType<HSRadio::SeekRequest>("SeekRequest");
 }

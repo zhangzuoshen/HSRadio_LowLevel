@@ -235,7 +235,7 @@ bool HSRadioOperationScheduler::Worker::sampleStationValid(IRadioHardware &hardw
         if (lastInfo)
             *lastInfo = info;
 
-        if (isStationValid(info, request.threshold))
+        if (isStationValid(info, request.band, request.fmThreshold, request.amThreshold))
             ++validCount;
         else
             ++invalidCount;

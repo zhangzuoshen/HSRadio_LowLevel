@@ -470,11 +470,13 @@ Result HSRadioSAF775XBackend::readSignalInfo(SignalInfo &info)
     info.usn = static_cast<int>(tune.usn);
     info.wam = static_cast<int>(tune.wam);
     info.offset = static_cast<int>(tune.offset);
+    info.modulation = static_cast<int>(tune.modulation);   // 解调质量（AM 判定用）
     info.stereo = (tune.stereo != 0);
     info.hasRssi = true;
     info.hasUsn = true;
     info.hasWam = true;
     info.hasOffset = true;
+    info.hasModulation = true;
     info.hasStereo = true;
     return Result::success();
 }
