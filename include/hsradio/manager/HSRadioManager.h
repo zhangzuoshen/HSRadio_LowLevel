@@ -93,6 +93,10 @@ private:
     // 把磁盘记忆频率对齐到当前配置的频段：越界时回退到该频段 defaultKHz。
     // 只读判断，不写 store；是否落盘由调用方决定。
     int normalizedFrequency(Band band, int storedKHz) const;
+    // 300ms 防抖落盘：写操作只标记 dirty，真正的 save 收敛到 flushSave()
+    // 统一检查返回值；shutdown() 强制 flush。返回首个落盘错误码。
+    void scheduleSave(bool includeConfig = false);
+    ErrorCode flushSave();
 
     HSRadioOperationScheduler *m_scheduler = nullptr;
     HSRadioStationStore      *m_store = nullptr;
@@ -110,6 +114,10 @@ private:
     SeekMode  m_currentSeekMode = SeekMode::FullBand;
     quint64   m_lastSeekId = 0;
     QTimer   *m_refreshTimer = nullptr;
+    // 300ms 防抖落盘；dirty 标记让真正的 save 只在 flushSave() 里执行一次。
+    QTimer   *m_saveTimer = nullptr;
+    bool      m_stateDirty = false;
+    bool      m_configDirty = false;
 
     // 已提交、尚未执行完成的调谐类命令；只有其 operationFinished 到达才置 hardwareTuned。
     QSet<RequestId> m_pendingTuneIds;

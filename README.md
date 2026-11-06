@@ -105,6 +105,11 @@ frequency is remembered. Only `FullBand` rebuilds the band's station list;
 `NextStation` is a transient jump that does not add stations or emit
 `stationsChanged`.
 
+State and config persistence uses `QSaveFile` (atomic full-file replace with
+`fsync`), copies the previous version to `.bak` before committing, and recovers
+from `.bak` when the main file is missing or corrupt. Writes are debounced by
+300ms and always flushed on shutdown.
+
 The backend is selected at build time: an ALSA build uses the real SAF775X
 backend, a `hsradio_no_alsa` build falls back to `MockRadioHardware`. Tool output
 uses the `hsradio.managertest` logging category.

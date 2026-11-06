@@ -79,6 +79,12 @@ Result HSRadioManager::initialize()
     });
     m_refreshTimer->start();
 
+    // 300ms 防抖落盘：多次写操作合并成一次；shutdown() 会强制 flush。
+    m_saveTimer = new QTimer(this);
+    m_saveTimer->setSingleShot(true);
+    m_saveTimer->setInterval(300);
+    QObject::connect(m_saveTimer, &QTimer::timeout, this, [this] { flushSave(); });
+
     // 开机不主动广播硬件状态：驱动 read-back 不返回频率，后端自报的 87000
     // 只是缓存默认值，广播出去会与记忆频点冲突。开机强制静音是既定约定，
     // 第一次真实操作（setBand / setFrequency / setMute / restore）会读回并广播。
@@ -87,6 +93,44 @@ Result HSRadioManager::initialize()
                                       << "remembered freq=" << m_currentFrequencyKHz << "kHz"
                                       << "hardwareTuned=false";
     return Result::success();
+}
+
+void HSRadioManager::scheduleSave(bool includeConfig)
+{
+    m_stateDirty = true;
+    if (includeConfig)
+        m_configDirty = true;
+    if (m_saveTimer)
+        m_saveTimer->start(300);   // 重复调用重置计时器，合并 300ms 内的写
+    else
+        flushSave();               // 定时器未建立时立即写，避免丢数据
+}
+
+ErrorCode HSRadioManager::flushSave()
+{
+    if (m_saveTimer)
+        m_saveTimer->stop();
+    ErrorCode code = ErrorCode::None;
+    if (m_stateDirty && m_store) {
+        m_stateDirty = false;
+        const Result r = m_store->save();
+        if (!r.ok()) {
+            code = r.code;
+            HSRADIO_LOG_WARNING(hsradioManager).noquote()
+                << "state save failed:" << r.message;
+        }
+    }
+    if (m_configDirty && m_repository) {
+        m_configDirty = false;
+        const Result r = m_repository->save();
+        if (!r.ok()) {
+            if (code == ErrorCode::None)
+                code = r.code;
+            HSRADIO_LOG_WARNING(hsradioManager).noquote()
+                << "config save failed:" << r.message;
+        }
+    }
+    return code;
 }
 
 void HSRadioManager::connectScheduler()
@@ -178,7 +222,7 @@ void HSRadioManager::connectScheduler()
                          // 只有 FullBand 重建电台列表，NextStation 不动列表。
                          m_currentFrequencyKHz = frequencyKHz;
                          m_store->setLastFrequency(m_currentBand, frequencyKHz);
-                         m_store->save();
+                         scheduleSave();
                          emit seekFinished(id, frequencyKHz, found);
                      });
 }
@@ -193,19 +237,7 @@ void HSRadioManager::shutdown()
 {
     if (m_refreshTimer)
         m_refreshTimer->stop();
-    // 保存失败必须显式告警，避免上层误以为状态已经落盘。
-    if (m_store) {
-        const Result result = m_store->save();
-        if (!result.ok())
-            HSRADIO_LOG_WARNING(hsradioManager).noquote()
-                << "state save failed:" << result.message;
-    }
-    if (m_repository) {
-        const Result result = m_repository->save();
-        if (!result.ok())
-            HSRADIO_LOG_WARNING(hsradioManager).noquote()
-                << "config save failed:" << result.message;
-    }
+    flushSave();   // 退出前强制落盘；返回值在 flushSave() 内统一处理并告警
 }
 
 RequestId HSRadioManager::restoreLastState()
@@ -221,16 +253,12 @@ RequestId HSRadioManager::restoreLastState()
     m_currentFrequencyKHz = freq;
 
     // 只在越界修正时才写回：正常开机恢复不产生落盘与 .bak 覆盖。
-    // 保存失败记入恢复序列的错误码，让 restoreFinished 对上层可见。
+    // 异常路径立即 flush，把落盘结果计入 restoreFinished 的错误码。
     ErrorCode initialCode = ErrorCode::None;
     if (freq != stored) {
         m_store->setLastFrequency(band, freq);
-        const Result saved = m_store->save();
-        if (!saved.ok()) {
-            initialCode = saved.code;
-            HSRADIO_LOG_WARNING(hsradioManager).noquote()
-                << "state save failed after frequency fallback:" << saved.message;
-        }
+        scheduleSave();
+        initialCode = flushSave();
     }
     HSRADIO_LOG_INFO(hsradioManager).noquote()
         << "restoreLastState; band=" << (band == Band::AM ? "AM" : "FM")
@@ -268,8 +296,7 @@ Result HSRadioManager::factoryReset()
     const int freq = normalizedFrequency(m_currentBand, stored);
     if (freq != stored)
         m_store->setLastFrequency(m_currentBand, freq);
-    m_store->save();
-    m_repository->save();
+    scheduleSave(true);   // state + config 一起落盘
     m_currentFrequencyKHz = freq;
     m_hardwareTuned = false;   // 恢复出厂只改数据，硬件仍在原频点
     m_pendingTuneIds.clear();
@@ -298,7 +325,7 @@ RequestId HSRadioManager::setBand(Band band)
     const int freq = normalizedFrequency(band, stored);
     if (freq != stored)
         m_store->setLastFrequency(band, freq);
-    m_store->save();
+    scheduleSave();
     m_currentBand = band;
     emit bandChanged(band);
     m_currentFrequencyKHz = freq;
@@ -323,7 +350,7 @@ RequestId HSRadioManager::setFrequency(int frequencyKHz)
                    .arg(frequencyKHz).arg(bc.minKHz).arg(bc.maxKHz);
     }
     m_store->setLastFrequency(m_currentBand, target);
-    m_store->save();
+    scheduleSave();
     m_currentFrequencyKHz = target;
     emit frequencyChanged(target);
     const RequestId id = m_scheduler->submitTune(target, IRadioHardware::TuneMode::Preset);
@@ -416,7 +443,7 @@ Result HSRadioManager::addStation(const Station &station)
         s.id = HSRadioStationStore::makeStationId(s.band, s.frequencyKHz);
     const Result r = m_store->addStation(s);
     if (r.ok()) {
-        m_store->save();
+        scheduleSave();
         emit stationsChanged(s.band);
     }
     return r;
@@ -433,7 +460,7 @@ Result HSRadioManager::removeStation(const QString &id)
             if (s.id == id) { band = b; break; }
     const Result r = m_store->removeStation(id);
     if (r.ok()) {
-        m_store->save();
+        scheduleSave();
         emit stationsChanged(band);
     }
     return r;
@@ -450,7 +477,7 @@ Result HSRadioManager::renameStation(const QString &id, const QString &name)
             if (s.id == id) { band = b; break; }
     const Result r = m_store->renameStation(id, name);
     if (r.ok()) {
-        m_store->save();
+        scheduleSave();
         emit stationsChanged(band);
     }
     return r;
@@ -463,7 +490,7 @@ Result HSRadioManager::clearStations(Band band)
                                QStringLiteral("存储层未注入"));
     const Result r = m_store->clearStations(band);
     if (r.ok()) {
-        m_store->save();
+        scheduleSave();
         emit stationsChanged(band);
     }
     return r;
@@ -484,7 +511,7 @@ Result HSRadioManager::addFavorite(const Station &station)
         s.id = HSRadioStationStore::makeStationId(s.band, s.frequencyKHz);
     const Result r = m_store->addFavorite(s);
     if (r.ok()) {
-        m_store->save();
+        scheduleSave();
         emit favoritesChanged();
     }
     return r;
@@ -497,7 +524,7 @@ Result HSRadioManager::removeFavorite(const QString &id)
                                QStringLiteral("存储层未注入"));
     const Result r = m_store->removeFavorite(id);
     if (r.ok()) {
-        m_store->save();
+        scheduleSave();
         emit favoritesChanged();
     }
     return r;
