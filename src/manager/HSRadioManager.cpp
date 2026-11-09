@@ -336,10 +336,17 @@ RequestId HSRadioManager::setBand(Band band)
     emit bandChanged(band);
     m_currentFrequencyKHz = freq;
     emit frequencyChanged(freq);
-    const RequestId id = m_scheduler->submitSetBand(band);
-    // 只下发频段，后端 applyTune 用的是自身缓存频率，缓存频率仍未下发，不置位。
-    enqueueReadState();
-    return id;
+    // 显式三步，与 restoreLastState() 一致：SetBand → Tune → ReadState。
+    // 后端 setBand() 会用自身缓存频率 applyTune，必须紧接着下发目标频点覆盖，
+    // 否则切到 AM 时会把 FM 缓存初值 87000 写进驱动并原样广播给 UI。
+    // 返回最后一条的 id，让调用方等到整条序列执行完成。
+    const RequestId bandId = m_scheduler->submitSetBand(band);
+    const RequestId tuneId = m_scheduler->submitTune(freq, IRadioHardware::TuneMode::Preset);
+    const RequestId stateId = m_scheduler->submitReadState();
+    if (!bandId || !tuneId || !stateId)
+        return 0;
+    m_pendingTuneIds.insert(tuneId);
+    return stateId;
 }
 
 RequestId HSRadioManager::setFrequency(int frequencyKHz)
