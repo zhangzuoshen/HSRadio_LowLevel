@@ -99,6 +99,7 @@ private:
     void executeSeek(const Command &command);
     bool sampleStationValid(IRadioHardware &hardware,
                             const SeekRequest &request,
+                            int frequencyKHz,
                             SignalInfo *lastInfo);
 
     HSRadioOperationScheduler *m_owner = nullptr;
@@ -212,6 +213,7 @@ void HSRadioOperationScheduler::Worker::execute(const Command &command)
 
 bool HSRadioOperationScheduler::Worker::sampleStationValid(IRadioHardware &hardware,
                                                           const SeekRequest &request,
+                                                          int frequencyKHz,
                                                           SignalInfo *lastInfo)
 {
     // 调谐后先等 PLL 锁定，再多次抽样（参考驱动实现：8ms 锁定 + 2ms x 4）。
@@ -235,7 +237,18 @@ bool HSRadioOperationScheduler::Worker::sampleStationValid(IRadioHardware &hardw
         if (lastInfo)
             *lastInfo = info;
 
-        if (isStationValid(info, request.band, request.fmThreshold, request.amThreshold))
+        const bool qualified = isStationValid(info, request.band,
+                                              request.fmThreshold, request.amThreshold);
+        HSRADIO_LOG_DEBUG(hsradioSeek).noquote()
+            << QStringLiteral("[SEEK] f=%1 kHz band=%2 lock=%3ms sample %4/%5 | rssi=%6 usn=%7 wam=%8 offset=%9 mod=%10 | qualified=%11")
+                   .arg(frequencyKHz)
+                   .arg(request.band == Band::AM ? QStringLiteral("AM") : QStringLiteral("FM"))
+                   .arg(request.lockMs)
+                   .arg(i + 1).arg(samples)
+                   .arg(info.rssi).arg(info.usn).arg(info.wam)
+                   .arg(info.offset).arg(info.modulation)
+                   .arg(qualified ? QStringLiteral("true") : QStringLiteral("false"));
+        if (qualified)
             ++validCount;
         else
             ++invalidCount;
@@ -249,7 +262,12 @@ bool HSRadioOperationScheduler::Worker::sampleStationValid(IRadioHardware &hardw
     }
 
     // 多次抽样中至少一次有效即判为有效电台。
-    return validCount >= 1;
+    const bool hit = validCount >= 1;
+    HSRADIO_LOG_DEBUG(hsradioSeek).noquote()
+        << QStringLiteral("[SEEK] f=%1 kHz => valid=%2 invalid=%3 hit=%4")
+               .arg(frequencyKHz).arg(validCount).arg(invalidCount)
+               .arg(hit ? QStringLiteral("true") : QStringLiteral("false"));
+    return hit;
 }
 
 void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
@@ -341,7 +359,7 @@ void HSRadioOperationScheduler::Worker::executeSeek(const Command &command)
         ++scannedPoints;
 
         SignalInfo info;
-        if (sampleStationValid(*m_hardware, request, &info)) {
+        if (sampleStationValid(*m_hardware, request, frequency, &info)) {
             found = true;
             emit m_owner->seekHit(id, frequency, info);
             if (request.mode == SeekMode::NextStation)

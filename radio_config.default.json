@@ -7,7 +7,6 @@
   },
   "seek": {
     "direction": "up",
-    "lockMs": 8,
     "sampleMs": 2,
     "sampleCount": 4,
     "maxInvalidRetries": 3,
@@ -16,12 +15,14 @@
       "minRssi": 25,
       "maxUsn": 25,
       "maxWam": 25,
-      "maxOffset": 40
+      "maxOffset": 40,
+      "lockMs": 8
     },
     "AM": {
       "minRssi": 30,
       "maxOffset": 20,
-      "maxModulation": 50
+      "maxModulation": 50,
+      "lockMs": 60
     }
   }
 }

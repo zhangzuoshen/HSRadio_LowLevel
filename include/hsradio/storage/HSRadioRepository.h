@@ -45,8 +45,9 @@ public:
     bool seekWrapAround() const;
     void setSeekWrapAround(bool wrap);
 
-    int seekLockMs() const;
-    void setSeekLockMs(int ms);
+    // 搜台锁定等待按频段区分：FM 8ms / AM 60ms。
+    int seekLockMs(Band band) const;
+    void setSeekLockMs(Band band, int ms);
 
     int seekSampleMs() const;
     void setSeekSampleMs(int ms);
@@ -75,7 +76,6 @@ private:
     AmSeekThreshold m_amThreshold;   // 默认 30/20/50（见 HSRadioTypes）
     bool m_seekUpward = true;
     bool m_seekWrapAround = true;
-    int  m_seekLockMs = 8;
     int  m_seekSampleMs = 2;
     int  m_seekSampleCount = 4;
     int  m_seekMaxInvalid = 3;

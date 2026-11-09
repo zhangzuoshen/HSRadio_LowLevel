@@ -16,7 +16,9 @@ namespace {
 constexpr unsigned char kModeStandby  = 0x00;
 constexpr unsigned char kModePreset   = 0x10; // 调谐到新节目，短静音
 constexpr unsigned char kModeSearch   = 0x20; // 调谐到新节目，保持静音
-constexpr unsigned char kModeReadBack = 0x70; // 请求信号参数
+// 读回信号参数不需要下发 0x70 请求：对齐参考驱动 readBytesCtl()，
+// 驱动 get 回调在 snd_ctl_elem_read() 时直接返回当前调谐状态与信号参数。
+// 若先 write 一次调谐请求，会重新触发 put 回调、废掉锁定等待并读到未稳定值。
 
 // 将硬件无关的 TuneMode 翻译为 SAF775X 的 ALSA
 // 控制字节。这里是唯一知晓设备值的地方。
@@ -51,19 +53,13 @@ struct ControlInfo {
 static_assert(sizeof(HSRadioSAF775XTune) == 28, "HSRadioSAF775XTune layout mismatch");
 static_assert(sizeof(HSRadioSAF775XRegTrait) == 2, "HSRadioSAF775XRegTrait layout mismatch");
 
-// 最小化、与版本无关的 BYTES 辅助函数。部分嵌入式/交叉 ALSA
-// 工具链未声明 snd_ctl_elem_value_set_bytes / get_bytes，因此
-// 改用始终可用的逐字节原语。
-static void setElemBytes(snd_ctl_elem_value_t *v, const void *data, size_t size) {
-    const unsigned char *p = static_cast<const unsigned char *>(data);
-    for (size_t i = 0; i < size; ++i)
-        snd_ctl_elem_value_set_byte(v, static_cast<unsigned int>(i), p[i]);
-}
-
-static void getElemBytes(snd_ctl_elem_value_t *v, void *data, size_t size) {
-    unsigned char *p = static_cast<unsigned char *>(data);
-    for (size_t i = 0; i < size; ++i)
-        p[i] = snd_ctl_elem_value_get_byte(v, static_cast<unsigned int>(i));
+// 对齐参考驱动 RadioControl::writeBytesCtl / readBytesCtl：
+//   - snd_ctl_elem_value_alloca 会把整个 elem（含 512 字节 BYTES 区）清零；
+//     用 malloc 时尾部是未初始化堆垃圾，驱动按整块解析时行为异常。
+//   - 用 set_interface + set_name 定位控件，整块 set_bytes / get_bytes 拷贝。
+static void initElemForControl(snd_ctl_elem_value_t *v, const QByteArray &nameBytes) {
+    snd_ctl_elem_value_set_interface(v, SND_CTL_ELEM_IFACE_MIXER);
+    snd_ctl_elem_value_set_name(v, nameBytes.constData());
 }
 
 Result lookupElement(snd_ctl_t *ctl, const QString &name, unsigned int index,
@@ -251,25 +247,21 @@ Result HSRadioSAF775XBackend::applyTune()
     tune.band = (m_currentBand == Band::AM) ? 1 : 0;
     tune.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz → 10 kHz 单位
 
-    ControlInfo info;
-    Result result = lookupElement(m_ctl, m_config.tuneControl, 0, info);
-    if (!result.ok()) return result;
+    // 类型/大小校验在 initialize() 已完成，这里直接按参考 writeBytesCtl 整块写。
+    const QByteArray nameBytes = m_config.tuneControl.toLocal8Bit();
+    snd_ctl_elem_value_t *elemVal = nullptr;
+    snd_ctl_elem_value_alloca(&elemVal);   // 清零整个 elem，避免 BYTES 区尾部堆垃圾
+    initElemForControl(elemVal, nameBytes);
+    snd_ctl_elem_set_bytes(elemVal, &tune, sizeof(tune));
 
-    const auto type = snd_ctl_elem_info_get_type(info.info.get());
-    if (type != SND_CTL_ELEM_TYPE_BYTES)
-        return Result::failure(ErrorCode::AlsaControlTypeUnsupported,
-            QStringLiteral("Tune control '%1' is not a BYTES control").arg(m_config.tuneControl));
+    HSRADIO_LOG_DEBUG(hsradioHardwareSaf775x).noquote()
+        << QStringLiteral("[TUNE-WRITE] mode=0x%1 band=%2 freq=%3 (kHz=%4) bytes=%5")
+               .arg(static_cast<unsigned int>(tune.mode), 0, 16)
+               .arg(static_cast<unsigned int>(tune.band))
+               .arg(tune.freq).arg(m_currentFreqKHz)
+               .arg(sizeof(tune));
 
-    snd_ctl_elem_value_t *rawValue = nullptr;
-    int allocRc = snd_ctl_elem_value_malloc(&rawValue);
-    if (allocRc < 0)
-        return alsaFailure(ErrorCode::HardwareOperationFailed,
-                           QStringLiteral("snd_ctl_elem_value_malloc"), allocRc);
-    ElemValuePtr elem(rawValue);
-    snd_ctl_elem_value_set_id(elem.get(), info.id.get());
-    setElemBytes(elem.get(), &tune, sizeof(tune));
-
-    const int rc = snd_ctl_elem_write(m_ctl, elem.get());
+    const int rc = snd_ctl_elem_write(m_ctl, elemVal);
     if (rc < 0) {
         HSRADIO_LOG_WARNING(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
         return alsaFailure(ErrorCode::AlsaWriteFailed,
@@ -284,45 +276,27 @@ Result HSRadioSAF775XBackend::readTune(HSRadioSAF775XTune &out)
         return Result::failure(ErrorCode::HardwareNotReady,
                                QStringLiteral("Hardware not initialized"));
 
-    HSRadioSAF775XTune request{};
-    request.mode = kModeReadBack;
-    request.band = (m_currentBand == Band::AM) ? 1 : 0;
-    request.freq = static_cast<unsigned int>(m_currentFreqKHz / 10);  // kHz → 10 kHz 单位
+    // 对齐参考 RadioControl::readBytesCtl()：alloca 清零整个 elem，
+    // set_interface + set_name 定位，纯 snd_ctl_elem_read，整块 memcpy 读回。
+    const QByteArray nameBytes = m_config.tuneControl.toLocal8Bit();
+    snd_ctl_elem_value_t *elemVal = nullptr;
+    snd_ctl_elem_value_alloca(&elemVal);
+    initElemForControl(elemVal, nameBytes);
 
-    ControlInfo info;
-    Result result = lookupElement(m_ctl, m_config.tuneControl, 0, info);
-    if (!result.ok()) return result;
-
-    const auto type = snd_ctl_elem_info_get_type(info.info.get());
-    if (type != SND_CTL_ELEM_TYPE_BYTES)
-        return Result::failure(ErrorCode::AlsaControlTypeUnsupported,
-            QStringLiteral("Tune control '%1' is not a BYTES control").arg(m_config.tuneControl));
-
-    snd_ctl_elem_value_t *rawValue = nullptr;
-    int allocRc = snd_ctl_elem_value_malloc(&rawValue);
-    if (allocRc < 0)
-        return alsaFailure(ErrorCode::HardwareOperationFailed,
-                           QStringLiteral("snd_ctl_elem_value_malloc"), allocRc);
-    ElemValuePtr elem(rawValue);
-    snd_ctl_elem_value_set_id(elem.get(), info.id.get());
-    setElemBytes(elem.get(), &request, sizeof(request));
-
-    // 写入读回请求，然后再读回填充后的结构体。
-    int rc = snd_ctl_elem_write(m_ctl, elem.get());
-    if (rc < 0) {
-        HSRADIO_LOG_WARNING(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
-        return alsaFailure(ErrorCode::AlsaWriteFailed,
-                           QStringLiteral("snd_ctl_elem_write('%1')").arg(m_config.tuneControl), rc);
-    }
-
-    rc = snd_ctl_elem_read(m_ctl, elem.get());
+    const int rc = snd_ctl_elem_read(m_ctl, elemVal);
     if (rc < 0) {
         HSRADIO_LOG_WARNING(hsradioHardwareSaf775x) << "ALSA snd_ctl_elem I/O failed, rc" << rc;
         return alsaFailure(ErrorCode::AlsaReadFailed,
                            QStringLiteral("snd_ctl_elem_read('%1')").arg(m_config.tuneControl), rc);
     }
 
-    getElemBytes(elem.get(), &out, sizeof(HSRadioSAF775XTune));
+    const void *rawPtr = snd_ctl_elem_value_get_bytes(elemVal);
+    if (!rawPtr)
+        return Result::failure(ErrorCode::AlsaReadFailed,
+                               QStringLiteral("snd_ctl_elem_value_get_bytes('%1') returned null")
+                                   .arg(m_config.tuneControl));
+
+    std::memcpy(&out, rawPtr, sizeof(HSRadioSAF775XTune));
     return Result::success();
 }
 
@@ -478,6 +452,15 @@ Result HSRadioSAF775XBackend::readSignalInfo(SignalInfo &info)
     info.hasOffset = true;
     info.hasModulation = true;
     info.hasStereo = true;
+
+    HSRADIO_LOG_DEBUG(hsradioHardwareSaf775x).noquote()
+        << QStringLiteral("[SIGNAL] freq=%1 kHz band=%2 mode=%3 | rssi=%4 usn=%5 wam=%6 offset=%7 mod=%8 stereo=%9")
+               .arg(m_currentFreqKHz)
+               .arg(m_currentBand == Band::AM ? QStringLiteral("AM") : QStringLiteral("FM"))
+               .arg(static_cast<unsigned int>(alsaTuneMode(m_currentTuneMode)), 0, 16)
+               .arg(info.rssi).arg(info.usn).arg(info.wam)
+               .arg(info.offset).arg(info.modulation)
+               .arg(info.stereo ? QStringLiteral("yes") : QStringLiteral("no"));
     return Result::success();
 }
 

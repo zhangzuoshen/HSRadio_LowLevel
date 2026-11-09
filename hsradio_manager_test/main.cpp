@@ -110,6 +110,8 @@ QString signalText(const SignalInfo &info)
         fields << QStringLiteral("WAM=%1").arg(info.wam);
     if (info.hasOffset)
         fields << QStringLiteral("OFFSET=%1").arg(info.offset);
+    if (info.hasModulation)
+        fields << QStringLiteral("MOD=%1").arg(info.modulation);
     if (info.hasStereo)
         fields << QStringLiteral("Stereo=%1")
                       .arg(info.stereo ? QStringLiteral("yes") : QStringLiteral("no"));

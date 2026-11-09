@@ -92,12 +92,14 @@ struct FmSeekThreshold {
     int maxUsn = 25;
     int maxWam = 25;
     int maxOffset = 40;
+    int lockMs = 8;      // Search 调谐后的 PLL 锁定等待
 };
 
 struct AmSeekThreshold {
     int minRssi = 30;
     int maxOffset = 20;
     int maxModulation = 50;
+    int lockMs = 60;     // AM 解调稳定更慢，未等够会读到未锁定的过渡值
 };
 
 // 一次搜台请求的完整参数（由 Manager 依配置构造，交给调度器执行）。
@@ -109,7 +111,7 @@ struct SeekRequest {
     int           minKHz = 0;
     int           maxKHz = 0;
     int           stepKHz = 0;
-    int           lockMs = 8;            // PLL 锁定时间
+    int           lockMs = 8;            // 本次搜台的 PLL 锁定等待（由 makeSeekRequest 按 band 填充：FM 8 / AM 60）
     int           sampleMs = 2;          // 单次抽样间隔
     int           sampleCount = 4;       // 抽样次数
     int           maxInvalid = 3;        // 连续无效则放弃

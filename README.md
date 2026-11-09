@@ -270,6 +270,35 @@ are independent, matching the reference driver's `setFmThreshold` /
 `--seek-max-wam`, `--seek-max-offset` set the **FM** thresholds only; AM keeps
 its own defaults (changeable via `radio_config.json` for the manager service).
 
+### Debugging a seek scan
+
+Two `debug` categories dump per-frequency parameters during a seek:
+
+- `hsradio.seek` — per sample / per frequency: `rssi / usn / wam / offset /
+  modulation`, the `qualified` result and the per-point `valid/invalid/hit` tally.
+- `hsradio.hardware.saf775x` — raw values read back from the driver on each
+  `readSignalInfo()` (frequency, band, tune mode, all signal fields).
+
+Enable them at runtime (Debug is off by default):
+
+```sh
+QT_LOGGING_RULES='hsradio.seek.debug=true;hsradio.hardware.saf775x.debug=true' \
+  QT_QPA_PLATFORM=offscreen /app/usr/bin1/hsradio_manager_test \
+  --set-band AM --seek --seek-mode full --no-progress
+```
+
+⚠️ With ADB, `export QT_LOGGING_RULES=...` on the **host** has no effect — the
+variable is not forwarded into `adb shell`. Set it **inside** the device shell
+command as shown above (or use `adb shell env QT_LOGGING_RULES=... <cmd>`).
+Multiple rules are separated by `;`; `QT_LOGGING_RULES='hsradio.*.debug=true'`
+enables all project categories.
+
+After each Search-mode tune, the scan waits for the band-specific PLL lock
+before reading signal quality: **FM 8 ms, AM 60 ms**. AM needs the longer
+settle time; reading earlier returns un-locked transient values and produces
+false stations. Both values live in `radio_config.json` under `seek.FM.lockMs`
+/ `seek.AM.lockMs`.
+
 ```sh
 # Automatic station search (FM 87.5-108.0 MHz, 100 kHz step):
 ./hsradio_hardware_test ... --seek --seek-band FM \

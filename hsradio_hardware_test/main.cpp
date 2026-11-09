@@ -57,7 +57,7 @@ bool parseIntegerOption(const QCommandLineParser &parser,
     return true;
 }
 
-// 参考驱动时序：调谐后需约 8ms PLL 锁定，再多次抽样(2ms 间隔)。
+// 参考驱动时序：调谐后需等 PLL 锁定（FM 8ms / AM 60ms），再多次抽样(2ms 间隔)。
 // N 次抽样中累计 3 次无效即放弃；至少 1 次有效则判为有效电台。
 // 判定按频段分流（FM / AM 两组阈值），复用库内 isStationValid。
 bool sampleStationValid(IRadioHardware &hw,
@@ -66,9 +66,11 @@ bool sampleStationValid(IRadioHardware &hw,
                         const AmSeekThreshold &am,
                         int samples = 4,
                         int sampleDelayMs = 2,
-                        int lockDelayMs = 8)
+                        int lockDelayMs = -1)
 {
-    QThread::msleep(static_cast<unsigned long>(lockDelayMs));
+    const int lockMs = lockDelayMs >= 0 ? lockDelayMs
+                                        : (band == Band::AM ? am.lockMs : fm.lockMs);
+    QThread::msleep(static_cast<unsigned long>(lockMs));
     int validCount = 0;
     int invalidCount = 0;
     for (int i = 0; i < samples; ++i) {

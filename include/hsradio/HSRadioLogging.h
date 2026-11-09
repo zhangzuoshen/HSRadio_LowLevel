@@ -16,6 +16,7 @@ Q_DECLARE_LOGGING_CATEGORY(hsradioHardwareMock)
 Q_DECLARE_LOGGING_CATEGORY(hsradioHardwareSaf775x)
 Q_DECLARE_LOGGING_CATEGORY(hsradioStorageStore)
 Q_DECLARE_LOGGING_CATEGORY(hsradioStorageRepository)
+Q_DECLARE_LOGGING_CATEGORY(hsradioSeek)
 
 // Qt 5.12 的 qC*(cat, ...) 是可变参数宏；只用流式输出而不传可变参数时，
 // -Wpedantic 会报 "ISO C++11 requires at least one argument for the ... in a variadic macro"。
