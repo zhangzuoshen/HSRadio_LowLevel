@@ -263,11 +263,12 @@ The test tool also ships an automatic station-search business flow (`--seek`).
 It scans the band from `--seek-from` to `--seek-to` in `--seek-step` kHz
 increments, tunes each candidate in Search (stay-muted) mode, and accepts a
 candidate as a station when its signal meets the band-specific quality
-thresholds. FM judges `rssi / usn / wam / offset`; AM judges
-`rssi / offset / modulation`. The CLI `--seek-min-rssi`, `--seek-max-usn`,
-`--seek-max-wam`, `--seek-max-offset` set the **FM** thresholds and also seed
-AM's `rssi`/`offset`; AM's `modulation` upper bound keeps its default (255)
-unless overridden in `radio_config.json`.
+thresholds. FM judges `rssi / usn / wam / offset` (defaults 25/25/25/40);
+AM judges `rssi / offset / modulation` (defaults 30/20/50). The two groups
+are independent, matching the reference driver's `setFmThreshold` /
+`setAmThreshold`. The CLI `--seek-min-rssi`, `--seek-max-usn`,
+`--seek-max-wam`, `--seek-max-offset` set the **FM** thresholds only; AM keeps
+its own defaults (changeable via `radio_config.json` for the manager service).
 
 ```sh
 # Automatic station search (FM 87.5-108.0 MHz, 100 kHz step):

@@ -13,15 +13,15 @@
     "maxInvalidRetries": 3,
     "wrapAround": true,
     "FM": {
-      "minRssi": 21,
+      "minRssi": 25,
       "maxUsn": 25,
       "maxWam": 25,
       "maxOffset": 40
     },
     "AM": {
       "minRssi": 30,
-      "maxOffset": 50,
-      "maxModulation": 255
+      "maxOffset": 20,
+      "maxModulation": 50
     }
   }
 }

@@ -231,7 +231,7 @@ int main(int argc, char *argv[])
 
     const QCommandLineOption seekMinRssiOption(
         QStringLiteral("seek-min-rssi"),
-        QStringLiteral("Optional: minimum RSSI(level) to accept a station (default: 21)."),
+        QStringLiteral("Optional: minimum RSSI(level) to accept a station (FM, default: 25)."),
         QStringLiteral("value"));
 
     const QCommandLineOption seekMaxUsnOption(
@@ -414,7 +414,8 @@ int main(int argc, char *argv[])
                 operationFailed = true;
             }
 
-            // 命令行阈值选项按 FM 口径解释；AM 复用 rssi/offset，modulation 取默认上限。
+            // 两套阈值彼此独立（对齐参考驱动 setFmThreshold / setAmThreshold）：
+            // CLI 的 --seek-* 选项只作用于 FM；AM 用自己的默认值 30/20/50。
             FmSeekThreshold fmTh;
             AmSeekThreshold amTh;
             if (parser.isSet(seekMinRssiOption)
@@ -429,9 +430,6 @@ int main(int argc, char *argv[])
             if (parser.isSet(seekMaxOffsetOption)
                 && !parseIntegerOption(parser, seekMaxOffsetOption, &fmTh.maxOffset))
                 operationFailed = true;
-
-            amTh.minRssi = fmTh.minRssi;
-            amTh.maxOffset = fmTh.maxOffset;
 
             if (!operationFailed) {
                 const bool found = runStationSearch(hardware, seekBand,

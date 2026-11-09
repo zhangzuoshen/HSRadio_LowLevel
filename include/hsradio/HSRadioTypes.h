@@ -86,8 +86,9 @@ struct Station {
 //   FM：rssi >= minRssi 且 usn <= maxUsn 且 wam <= maxWam 且 offset <= maxOffset
 //   AM：rssi >= minRssi 且 offset <= maxOffset 且 modulation <= maxModulation
 // 注：AM 的 usn/wam 不参与判定（与参考驱动一致）。
+// 默认值对齐参考驱动 RadioControl::setFmThreshold / setAmThreshold。
 struct FmSeekThreshold {
-    int minRssi = 21;
+    int minRssi = 25;
     int maxUsn = 25;
     int maxWam = 25;
     int maxOffset = 40;
@@ -95,8 +96,8 @@ struct FmSeekThreshold {
 
 struct AmSeekThreshold {
     int minRssi = 30;
-    int maxOffset = 50;
-    int maxModulation = 255;   // 占位上限（解调质量 0..255），待真机数据校准
+    int maxOffset = 20;
+    int maxModulation = 50;
 };
 
 // 一次搜台请求的完整参数（由 Manager 依配置构造，交给调度器执行）。

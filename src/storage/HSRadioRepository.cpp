@@ -242,8 +242,8 @@ void HSRadioRepository::setBuiltInDefaults()
     m_region = QStringLiteral("CN");
     m_bandFM = BandConfig{87500, 108000, 100, 87500};
     m_bandAM = BandConfig{531, 1602, 9, 531};
-    m_fmThreshold = FmSeekThreshold{};   // 21/25/25/40
-    m_amThreshold = AmSeekThreshold{};   // 30/50/255
+    m_fmThreshold = FmSeekThreshold{};   // 25/25/25/40
+    m_amThreshold = AmSeekThreshold{};   // 30/20/50
     m_seekUpward = true;
     m_seekWrapAround = true;
     m_seekLockMs = 8;

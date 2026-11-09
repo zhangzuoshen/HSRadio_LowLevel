@@ -71,8 +71,8 @@ private:
     QString      m_region = QStringLiteral("CN");
     BandConfig   m_bandFM{87500, 108000, 100, 87500};
     BandConfig   m_bandAM{531, 1602, 9, 531};
-    FmSeekThreshold m_fmThreshold;   // 默认 21/25/25/40（见 HSRadioTypes）
-    AmSeekThreshold m_amThreshold;   // 默认 30/50/255（见 HSRadioTypes）
+    FmSeekThreshold m_fmThreshold;   // 默认 25/25/25/40（见 HSRadioTypes）
+    AmSeekThreshold m_amThreshold;   // 默认 30/20/50（见 HSRadioTypes）
     bool m_seekUpward = true;
     bool m_seekWrapAround = true;
     int  m_seekLockMs = 8;

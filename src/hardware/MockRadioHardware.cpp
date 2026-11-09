@@ -6,7 +6,7 @@ namespace HSRadio {
 namespace {
 
 // 未预置频点的默认"弱信号"：明显低于常规阈值
-// （rssi >= 21、usn <= 25、wam <= 25、offset <= 40），判为无台。
+// （rssi >= 25、usn <= 25、wam <= 25、offset <= 40），判为无台。
 SignalInfo weakSignal()
 {
     SignalInfo info;
