@@ -105,6 +105,18 @@ frequency is remembered. Only `FullBand` rebuilds the band's station list;
 `NextStation` is a transient jump that does not add stations or emit
 `stationsChanged`.
 
+### Configuration files
+
+| File | Purpose |
+|------|---------|
+| `/data/hsradio/radio_config.json` | Active tuning config (region, band ranges, seek thresholds/timings) |
+| `/data/hsradio/radio_state.json` | User state (current band, remembered frequencies, stations, favorites) |
+
+Factory defaults are **built into the code** (`HSRadioRepository::setBuiltInDefaults()`
+and the threshold struct defaults in `HSRadioTypes.h`); there is no external
+default template file. `--factory-reset` and first boot both use these built-in
+values, so changing factory defaults means changing code and redeploying.
+
 State and config persistence uses `QSaveFile` (atomic full-file replace with
 `fsync`), copies the previous version to `.bak` before committing, and recovers
 from `.bak` when the main file is missing or corrupt. Writes are debounced by
@@ -266,9 +278,11 @@ candidate as a station when its signal meets the band-specific quality
 thresholds. FM judges `rssi / usn / wam / offset` (defaults 25/25/25/40);
 AM judges `rssi / offset / modulation` (defaults 30/20/50). The two groups
 are independent, matching the reference driver's `setFmThreshold` /
-`setAmThreshold`. The CLI `--seek-min-rssi`, `--seek-max-usn`,
-`--seek-max-wam`, `--seek-max-offset` set the **FM** thresholds only; AM keeps
-its own defaults (changeable via `radio_config.json` for the manager service).
+`setAmThreshold`. Both use the same `SeekThreshold` struct (fields not used by a
+band are 0), and a `SeekRequest` carries only the group for its `band`. The CLI
+`--seek-min-rssi`, `--seek-max-usn`, `--seek-max-wam`, `--seek-max-offset` set
+the **FM** thresholds only; AM keeps its own defaults (changeable via
+`radio_config.json` for the manager service).
 
 ### Debugging a seek scan
 

@@ -237,8 +237,7 @@ bool HSRadioOperationScheduler::Worker::sampleStationValid(IRadioHardware &hardw
         if (lastInfo)
             *lastInfo = info;
 
-        const bool qualified = isStationValid(info, request.band,
-                                              request.fmThreshold, request.amThreshold);
+        const bool qualified = isStationValid(info, request.band, request.threshold);
         HSRADIO_LOG_DEBUG(hsradioSeek).noquote()
             << QStringLiteral("[SEEK] f=%1 kHz band=%2 lock=%3ms sample %4/%5 | rssi=%6 usn=%7 wam=%8 offset=%9 mod=%10 | qualified=%11")
                    .arg(frequencyKHz)

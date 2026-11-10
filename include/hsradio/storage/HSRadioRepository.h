@@ -8,7 +8,7 @@ namespace HSRadio {
 
 // 配置仓库：负责 radio_config.json 的读写与内存镜像，
 // 涵盖地区(region)、各频段范围/步进/默认频率、搜台阈值与时序。
-// 恢复出厂 = 用 default 模板（或内置默认）覆盖 config 并落盘。
+// 默认值全部由代码内置（setBuiltInDefaults），不依赖外部模板文件。
 class HSRadioRepository {
 public:
     struct BandConfig {
@@ -18,14 +18,12 @@ public:
         int defaultKHz = 87500;
     };
 
-    // defaultConfigFilePath 为空时，按 configFilePath + ".default" 推导。
-    explicit HSRadioRepository(const QString &configFilePath,
-                              const QString &defaultConfigFilePath = QString());
+    explicit HSRadioRepository(const QString &configFilePath);
 
     Result load();
     // 写回磁盘；policy 决定 .bak 的生成/保留/清除（默认生成）。
     Result save(JsonBackupPolicy policy = JsonBackupPolicy::Create);
-    Result resetToDefault();      // 用 default 模板（或内置默认）覆盖并落盘
+    Result resetToDefault();      // 用内置默认覆盖并落盘
 
     QString region() const;
     void setRegion(const QString &region);
@@ -33,11 +31,11 @@ public:
     BandConfig bandConfig(Band band) const;
     void setBandConfig(Band band, const BandConfig &cfg);
 
-    FmSeekThreshold fmSeekThreshold() const;
-    void setFmSeekThreshold(const FmSeekThreshold &th);
+    SeekThreshold fmSeekThreshold() const;
+    void setFmSeekThreshold(const SeekThreshold &th);
 
-    AmSeekThreshold amSeekThreshold() const;
-    void setAmSeekThreshold(const AmSeekThreshold &th);
+    SeekThreshold amSeekThreshold() const;
+    void setAmSeekThreshold(const SeekThreshold &th);
 
     bool seekUpward() const;
     void setSeekUpward(bool upward);
@@ -67,13 +65,13 @@ private:
     void parseFromJson(const QJsonObject &root);
 
     QString m_configFilePath;
-    QString m_defaultConfigFilePath;
 
     QString      m_region = QStringLiteral("CN");
     BandConfig   m_bandFM{87500, 108000, 100, 87500};
     BandConfig   m_bandAM{531, 1602, 9, 531};
-    FmSeekThreshold m_fmThreshold;   // 默认 25/25/25/40（见 HSRadioTypes）
-    AmSeekThreshold m_amThreshold;   // 默认 30/20/50（见 HSRadioTypes）
+    // 出厂默认值直接在此定义，改 HSRadioTypes.h 的两个常量即可全局调整。
+    SeekThreshold m_fmThreshold = kDefaultFmSeekThreshold;   // 25/25/25/40, mod=0, lock=8ms
+    SeekThreshold m_amThreshold = kDefaultAmSeekThreshold;   // 30/0/0/20, mod=50, lock=60ms
     bool m_seekUpward = true;
     bool m_seekWrapAround = true;
     int  m_seekSampleMs = 2;

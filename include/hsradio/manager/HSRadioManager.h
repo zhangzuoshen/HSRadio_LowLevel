@@ -34,7 +34,7 @@ public:
     // 内部按 SetBand → Tune → ReadState 下发，只下发频点、不解除静音，
     // 是否恢复播放由 HMI 音源管理决定。
     RequestId restoreLastState();
-    Result factoryReset();   // 状态回默认 + 配置回出厂模板
+    Result factoryReset();   // 状态回默认 + 配置回内置默认
 
     // —— 查询（同步，无硬件 I/O）——
     bool       isInitialized() const;

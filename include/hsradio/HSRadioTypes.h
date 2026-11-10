@@ -82,25 +82,24 @@ struct Station {
     QString source;              // 来源："seek" | "manual"
 };
 
-// 搜台信号质量阈值：FM / AM 分两组，判定口径不同。
+// 搜台阈值：FM / AM 共用同一结构，按频段各取一组；该频段不判定的字段填 0。
 //   FM：rssi >= minRssi 且 usn <= maxUsn 且 wam <= maxWam 且 offset <= maxOffset
 //   AM：rssi >= minRssi 且 offset <= maxOffset 且 modulation <= maxModulation
-// 注：AM 的 usn/wam 不参与判定（与参考驱动一致）。
-// 默认值对齐参考驱动 RadioControl::setFmThreshold / setAmThreshold。
-struct FmSeekThreshold {
-    int minRssi = 25;
-    int maxUsn = 25;
-    int maxWam = 25;
-    int maxOffset = 40;
-    int lockMs = 8;      // Search 调谐后的 PLL 锁定等待
+// 字段本身无默认值，出厂默认值统一由下面两个常量给出（改这里即可调整）。
+struct SeekThreshold {
+    int minRssi;        // rssi 下限（FM/AM）
+    int maxUsn;         // usn 上限（仅 FM，AM 填 0）
+    int maxWam;         // wam 上限（仅 FM，AM 填 0）
+    int maxOffset;      // offset 上限（FM/AM）
+    int maxModulation;  // modulation 上限（仅 AM，FM 填 0）
+    int lockMs;         // Search 调谐后的 PLL 锁定等待
 };
 
-struct AmSeekThreshold {
-    int minRssi = 30;
-    int maxOffset = 20;
-    int maxModulation = 50;
-    int lockMs = 60;     // AM 解调稳定更慢，未等够会读到未锁定的过渡值
-};
+// 出厂默认值：全部集中在此头文件，恢复出厂/首次启动/搜台请求都复用。
+// 对齐参考驱动 RadioControl::setFmThreshold / setAmThreshold；
+// AM 解调稳定更慢，锁定等待 60ms，FM 为 8ms。
+inline constexpr SeekThreshold kDefaultFmSeekThreshold{25, 25, 25, 40, 0, 8};
+inline constexpr SeekThreshold kDefaultAmSeekThreshold{30, 0, 0, 20, 50, 60};
 
 // 一次搜台请求的完整参数（由 Manager 依配置构造，交给调度器执行）。
 struct SeekRequest {
@@ -118,9 +117,8 @@ struct SeekRequest {
     bool          wrapAround = true;     // 到边界是否回绕
     bool          muteDuringSeek = true; // 搜台期间强制静音，结束恢复
 
-    // 频段专属阈值：判定时按 band 选用对应一组。
-    FmSeekThreshold fmThreshold;
-    AmSeekThreshold amThreshold;
+    // 本次搜台所用的一组阈值（由 makeSeekRequest 按 band 选 FM/AM 默认值填入）。
+    SeekThreshold threshold = kDefaultFmSeekThreshold;
 };
 
 } // namespace HSRadio
@@ -132,8 +130,7 @@ Q_DECLARE_METATYPE(HSRadio::SignalInfo)
 Q_DECLARE_METATYPE(HSRadio::HardwareState)
 Q_DECLARE_METATYPE(HSRadio::Station)
 Q_DECLARE_METATYPE(HSRadio::SeekMode)
-Q_DECLARE_METATYPE(HSRadio::FmSeekThreshold)
-Q_DECLARE_METATYPE(HSRadio::AmSeekThreshold)
+Q_DECLARE_METATYPE(HSRadio::SeekThreshold)
 Q_DECLARE_METATYPE(HSRadio::SeekRequest)
 
 // 运行期元类型注册：跨线程（调度器工作线程 -> 主线程）信号携带自定义
@@ -152,8 +149,7 @@ inline void registerHSRadioMetaTypes()
     qRegisterMetaType<HSRadio::HardwareState>();
     qRegisterMetaType<HSRadio::Station>();
     qRegisterMetaType<HSRadio::SeekMode>();
-    qRegisterMetaType<HSRadio::FmSeekThreshold>();
-    qRegisterMetaType<HSRadio::AmSeekThreshold>();
+    qRegisterMetaType<HSRadio::SeekThreshold>();
     qRegisterMetaType<HSRadio::SeekRequest>();
     qRegisterMetaType<HSRadio::Band>("Band");
     qRegisterMetaType<HSRadio::ErrorCode>("ErrorCode");
@@ -162,7 +158,6 @@ inline void registerHSRadioMetaTypes()
     qRegisterMetaType<HSRadio::HardwareState>("HardwareState");
     qRegisterMetaType<HSRadio::Station>("Station");
     qRegisterMetaType<HSRadio::SeekMode>("SeekMode");
-    qRegisterMetaType<HSRadio::FmSeekThreshold>("FmSeekThreshold");
-    qRegisterMetaType<HSRadio::AmSeekThreshold>("AmSeekThreshold");
+    qRegisterMetaType<HSRadio::SeekThreshold>("SeekThreshold");
     qRegisterMetaType<HSRadio::SeekRequest>("SeekRequest");
 }

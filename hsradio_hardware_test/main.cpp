@@ -59,17 +59,15 @@ bool parseIntegerOption(const QCommandLineParser &parser,
 
 // 参考驱动时序：调谐后需等 PLL 锁定（FM 8ms / AM 60ms），再多次抽样(2ms 间隔)。
 // N 次抽样中累计 3 次无效即放弃；至少 1 次有效则判为有效电台。
-// 判定按频段分流（FM / AM 两组阈值），复用库内 isStationValid。
+// 判定按 band 用传入的那一组阈值，复用库内 isStationValid。
 bool sampleStationValid(IRadioHardware &hw,
                         Band band,
-                        const FmSeekThreshold &fm,
-                        const AmSeekThreshold &am,
+                        const SeekThreshold &th,
                         int samples = 4,
                         int sampleDelayMs = 2,
                         int lockDelayMs = -1)
 {
-    const int lockMs = lockDelayMs >= 0 ? lockDelayMs
-                                        : (band == Band::AM ? am.lockMs : fm.lockMs);
+    const int lockMs = lockDelayMs >= 0 ? lockDelayMs : th.lockMs;
     QThread::msleep(static_cast<unsigned long>(lockMs));
     int validCount = 0;
     int invalidCount = 0;
@@ -78,7 +76,7 @@ bool sampleStationValid(IRadioHardware &hw,
         if (!hw.readSignalInfo(info).ok())
             return false;
 
-        const bool ok = isStationValid(info, band, fm, am);
+        const bool ok = isStationValid(info, band, th);
 
         if (ok) ++validCount; else ++invalidCount;
         if (invalidCount >= 3) break;
@@ -95,8 +93,7 @@ bool runStationSearch(IRadioHardware &hw,
                       int fromKHz,
                       int toKHz,
                       int stepKHz,
-                      const FmSeekThreshold &fm,
-                      const AmSeekThreshold &am)
+                      const SeekThreshold &th)
 {
     if (stepKHz <= 0) {
         qCritical() << "Seek step must be positive.";
@@ -119,7 +116,7 @@ bool runStationSearch(IRadioHardware &hw,
             qWarning().noquote() << "tune skipped at" << f << "kHz";
             continue;
         }
-        if (sampleStationValid(hw, band, fm, am)) {
+        if (sampleStationValid(hw, band, th)) {
             found.append(f);
             qInfo().noquote() << "[FOUND] station at" << f << "kHz";
         }
@@ -416,27 +413,29 @@ int main(int argc, char *argv[])
                 operationFailed = true;
             }
 
-            // 两套阈值彼此独立（对齐参考驱动 setFmThreshold / setAmThreshold）：
-            // CLI 的 --seek-* 选项只作用于 FM；AM 用自己的默认值 30/20/50。
-            FmSeekThreshold fmTh;
-            AmSeekThreshold amTh;
-            if (parser.isSet(seekMinRssiOption)
-                && !parseIntegerOption(parser, seekMinRssiOption, &fmTh.minRssi))
-                operationFailed = true;
-            if (parser.isSet(seekMaxUsnOption)
-                && !parseIntegerOption(parser, seekMaxUsnOption, &fmTh.maxUsn))
-                operationFailed = true;
-            if (parser.isSet(seekMaxWamOption)
-                && !parseIntegerOption(parser, seekMaxWamOption, &fmTh.maxWam))
-                operationFailed = true;
-            if (parser.isSet(seekMaxOffsetOption)
-                && !parseIntegerOption(parser, seekMaxOffsetOption, &fmTh.maxOffset))
-                operationFailed = true;
+            // 按本次搜台频段取一组阈值；CLI 的 --seek-* 选项只作用于 FM。
+            SeekThreshold th = (seekBand == Band::AM)
+                                   ? kDefaultAmSeekThreshold
+                                   : kDefaultFmSeekThreshold;
+            if (seekBand == Band::FM) {
+                if (parser.isSet(seekMinRssiOption)
+                    && !parseIntegerOption(parser, seekMinRssiOption, &th.minRssi))
+                    operationFailed = true;
+                if (parser.isSet(seekMaxUsnOption)
+                    && !parseIntegerOption(parser, seekMaxUsnOption, &th.maxUsn))
+                    operationFailed = true;
+                if (parser.isSet(seekMaxWamOption)
+                    && !parseIntegerOption(parser, seekMaxWamOption, &th.maxWam))
+                    operationFailed = true;
+                if (parser.isSet(seekMaxOffsetOption)
+                    && !parseIntegerOption(parser, seekMaxOffsetOption, &th.maxOffset))
+                    operationFailed = true;
+            }
 
             if (!operationFailed) {
                 const bool found = runStationSearch(hardware, seekBand,
                                                    seekFrom, seekTo, seekStep,
-                                                   fmTh, amTh);
+                                                   th);
                 operationFailed |= !reportResult(
                     QStringLiteral("seek(%1, %2..%3 @%4)")
                         .arg(seekBand == Band::FM ? QStringLiteral("FM")

@@ -144,12 +144,8 @@ QJsonObject serializeBand(const HSRadioRepository::BandConfig &cfg)
 
 } // namespace
 
-HSRadioRepository::HSRadioRepository(const QString &configFilePath,
-                                   const QString &defaultConfigFilePath)
+HSRadioRepository::HSRadioRepository(const QString &configFilePath)
     : m_configFilePath(configFilePath)
-    , m_defaultConfigFilePath(defaultConfigFilePath.isEmpty()
-                                 ? configFilePath + QStringLiteral(".default")
-                                 : defaultConfigFilePath)
 {
 }
 
@@ -163,15 +159,11 @@ Result HSRadioRepository::load()
         return r;
     }
     if (!hasData) {
-        // 首次启动 / 文件被删：从默认模板或内置默认初始化后立即落盘。
+        // 首次启动 / 文件被删：用代码内置默认初始化后立即落盘。
         // 防抖下 shutdown() 只在 dirty 时写，若这里不创建，config 永远不会重建。
-        if (QFile::exists(m_defaultConfigFilePath)) {
-            QJsonDocument d;
-            bool defaultHasData = false;
-            const Result dr = readJsonFile(m_defaultConfigFilePath, &d, &defaultHasData);
-            if (dr.ok() && defaultHasData && d.isObject())
-                parseFromJson(d.object());
-        }
+        setBuiltInDefaults();
+        HSRADIO_LOG_INFO(hsradioStorageRepository).noquote()
+            << "config initialized from built-in defaults";
         return save();
     }
     if (doc.isObject())
@@ -224,17 +216,8 @@ Result HSRadioRepository::save(JsonBackupPolicy policy)
 
 Result HSRadioRepository::resetToDefault()
 {
-    if (QFile::exists(m_defaultConfigFilePath)) {
-        QJsonDocument d;
-        bool dex = false;
-        const Result dr = readJsonFile(m_defaultConfigFilePath, &d, &dex);
-        if (dr.ok() && dex && d.isObject()) {
-            parseFromJson(d.object());
-            return Result::success();
-        }
-    }
     setBuiltInDefaults();
-    HSRADIO_LOG_INFO(hsradioStorageRepository).noquote() << "reset to default";
+    HSRADIO_LOG_INFO(hsradioStorageRepository).noquote() << "reset to built-in defaults";
     return Result::success();
 }
 
@@ -243,8 +226,8 @@ void HSRadioRepository::setBuiltInDefaults()
     m_region = QStringLiteral("CN");
     m_bandFM = BandConfig{87500, 108000, 100, 87500};
     m_bandAM = BandConfig{531, 1602, 9, 531};
-    m_fmThreshold = FmSeekThreshold{};   // 25/25/25/40, lock 8ms
-    m_amThreshold = AmSeekThreshold{};   // 30/20/50, lock 60ms
+    m_fmThreshold = kDefaultFmSeekThreshold;
+    m_amThreshold = kDefaultAmSeekThreshold;
     m_seekUpward = true;
     m_seekWrapAround = true;
     m_seekSampleMs = 2;
@@ -303,11 +286,11 @@ void HSRadioRepository::setBandConfig(Band band, const BandConfig &cfg)
         m_bandFM = cfg;
 }
 
-FmSeekThreshold HSRadioRepository::fmSeekThreshold() const { return m_fmThreshold; }
-void HSRadioRepository::setFmSeekThreshold(const FmSeekThreshold &th) { m_fmThreshold = th; }
+SeekThreshold HSRadioRepository::fmSeekThreshold() const { return m_fmThreshold; }
+void HSRadioRepository::setFmSeekThreshold(const SeekThreshold &th) { m_fmThreshold = th; }
 
-AmSeekThreshold HSRadioRepository::amSeekThreshold() const { return m_amThreshold; }
-void HSRadioRepository::setAmSeekThreshold(const AmSeekThreshold &th) { m_amThreshold = th; }
+SeekThreshold HSRadioRepository::amSeekThreshold() const { return m_amThreshold; }
+void HSRadioRepository::setAmSeekThreshold(const SeekThreshold &th) { m_amThreshold = th; }
 
 bool HSRadioRepository::seekUpward() const { return m_seekUpward; }
 void HSRadioRepository::setSeekUpward(bool upward) { m_seekUpward = upward; }
@@ -348,9 +331,8 @@ SeekRequest HSRadioRepository::makeSeekRequest(Band band, bool upward, SeekMode 
     req.minKHz = bc.minKHz;
     req.maxKHz = bc.maxKHz;
     req.stepKHz = bc.stepKHz;
-    req.fmThreshold = m_fmThreshold;
-    req.amThreshold = m_amThreshold;
-    req.lockMs = seekLockMs(band);   // FM 8ms / AM 60ms
+    req.threshold = (band == Band::AM) ? m_amThreshold : m_fmThreshold;
+    req.lockMs = req.threshold.lockMs;   // FM 8ms / AM 60ms
     req.sampleMs = m_seekSampleMs;
     req.sampleCount = m_seekSampleCount;
     req.maxInvalid = m_seekMaxInvalid;
