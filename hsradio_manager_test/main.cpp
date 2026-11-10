@@ -244,6 +244,18 @@ int main(int argc, char *argv[])
         QStringLiteral("remove-fav"),
         QStringLiteral("删除收藏（按 id）。"),
         QStringLiteral("id"));
+    const QCommandLineOption managerRenameStationOption(
+        QStringLiteral("rename-station"),
+        QStringLiteral("重命名电台 id:name（可重复；省略名称表示清空名称）。"),
+        QStringLiteral("id:name"));
+    const QCommandLineOption managerClearStationsOption(
+        QStringLiteral("clear-stations"),
+        QStringLiteral("清空电台列表：FM、AM 或 current（当前频段）；必须带取值。"),
+        QStringLiteral("FM|AM|current"));
+    const QCommandLineOption managerIsFavOption(
+        QStringLiteral("is-fav"),
+        QStringLiteral("查询该 id 是否已收藏（可重复），打印 true/false。"),
+        QStringLiteral("id"));
     const QCommandLineOption managerListStationsOption(
         QStringLiteral("list-stations"),
         QStringLiteral("列出当前频段电台。"));
@@ -276,6 +288,9 @@ int main(int argc, char *argv[])
     parser.addOption(managerAddFavOption);
     parser.addOption(managerRemoveStationOption);
     parser.addOption(managerRemoveFavOption);
+    parser.addOption(managerRenameStationOption);
+    parser.addOption(managerClearStationsOption);
+    parser.addOption(managerIsFavOption);
     parser.addOption(managerListStationsOption);
     parser.addOption(managerListFavsOption);
     parser.addOption(managerRestoreOption);
@@ -504,6 +519,50 @@ int main(int argc, char *argv[])
                 const QString id = parser.value(managerRemoveFavOption);
                 const Result r = manager.removeFavorite(id);
                 reportResult(QStringLiteral("manager.removeFavorite(%1)").arg(id), r.code, r.message);
+            }
+            // 重命名：id 与名称按第一个冒号分隔，名称可含冒号；省略名称表示清空名称。
+            for (const QString &t : parser.values(managerRenameStationOption)) {
+                const int sep = t.indexOf(QLatin1Char(':'));
+                const QString id = (sep < 0 ? t : t.left(sep)).trimmed();
+                const QString name = sep < 0 ? QString() : t.mid(sep + 1);
+                if (id.isEmpty()) {
+                    HSRADIO_LOG_CRITICAL(hsradioManagerTest) << "Invalid --rename-station:" << t;
+                    anyFailed = true;
+                    continue;
+                }
+                const Result r = manager.renameStation(id, name);
+                if (!reportResult(QStringLiteral("manager.renameStation(%1, %2)").arg(id).arg(name),
+                                  r.code, r.message))
+                    anyFailed = true;
+            }
+            // 清空列表：默认当前频段，也可显式指定 FM/AM，用来验证不串台。
+            if (parser.isSet(managerClearStationsOption)) {
+                const QString t = parser.value(managerClearStationsOption).trimmed().toUpper();
+                bool valid = true;
+                Band band = manager.currentBand();
+                if (t == QStringLiteral("FM"))
+                    band = Band::FM;
+                else if (t == QStringLiteral("AM"))
+                    band = Band::AM;
+                else if (t != QStringLiteral("CURRENT") && !t.isEmpty()) {
+                    HSRADIO_LOG_CRITICAL(hsradioManagerTest) << "Invalid --clear-stations:" << t;
+                    anyFailed = true;
+                    valid = false;
+                }
+                if (valid) {
+                    const Result r = manager.clearStations(band);
+                    if (!reportResult(QStringLiteral("manager.clearStations(%1)").arg(bandName(band)),
+                                      r.code, r.message))
+                        anyFailed = true;
+                }
+            }
+            for (const QString &t : parser.values(managerIsFavOption)) {
+                const QString id = t.trimmed();
+                HSRADIO_LOG_INFO(hsradioManagerTest).noquote()
+                    << QStringLiteral("[MGR] isFavorite(%1)=%2")
+                           .arg(id)
+                           .arg(manager.isFavorite(id) ? QStringLiteral("true")
+                                                       : QStringLiteral("false"));
             }
             if (parser.isSet(managerListStationsOption)) {
                 HSRADIO_LOG_INFO(hsradioManagerTest).noquote() << QStringLiteral("[MGR] stations(%1):")
