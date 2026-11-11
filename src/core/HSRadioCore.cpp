@@ -336,6 +336,12 @@ void HSRadioCore::onMessage(int msg, const QJsonValue &value)
 
 void HSRadioCore::dispatch(int msg, const QJsonValue &value)
 {
+    // 平台消息在组内广播，Core 自己发出的 update* 也会回环到 onMessage。
+    // 框架不携带发送者标识，因此按消息段区分：通知段一律不是请求，直接丢弃；
+    // 否则 default 分支回 updateError，该消息又被自己收到，形成无限循环。
+    if (msg >= HSRadioMsg::updateReady)
+        return;
+
     const quint64 reqId = reqIdOf(value);
     const QJsonObject args = objectOf(value);
 
@@ -529,7 +535,8 @@ void HSRadioCore::dispatch(int msg, const QJsonValue &value)
     }
 
     default:
-        HSRADIO_LOG_WARNING(hsradioCore).noquote() << "unsupported msg" << msg;
+        HSRADIO_LOG_WARNING(hsradioCore).noquote() << "unsupported msg" << QString("0x%1").arg(msg, 4, 16, QChar('0'));
+        // 只对真正的未知请求回错误；update 段已在入口过滤，回环不会再触发这里。
         sendError(reqId, msg, ErrorCode::InvalidParameter, QStringLiteral("unsupported message id"));
         break;
     }

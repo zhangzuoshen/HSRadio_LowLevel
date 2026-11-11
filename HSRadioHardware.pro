@@ -3,7 +3,7 @@ QT -= gui
 
 CONFIG += qt plugin
 TEMPLATE = lib
-TARGET = HSRadio
+TARGET = HSRadioPlugin
 
 # 平台公共配置：注入 MODULE_NAME、HS_OS_ARM/HS_OS_LINUX、HS_SYSROOT_DIR，
 # 以及平台各模块的 INCLUDEPATH / LIBS。相对路径按平台工程布局
